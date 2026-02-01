@@ -2,7 +2,7 @@ mod commands;
 mod models;
 mod utils;
 
-use commands::{config, diagnostics, process, service};
+use commands::{config, diagnostics, installer, process, service};
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -35,6 +35,13 @@ pub fn run() {
             diagnostics::test_ai_connection,
             diagnostics::test_channel,
             diagnostics::get_system_info,
+            diagnostics::start_channel_login,
+            // 安装器
+            installer::check_environment,
+            installer::install_nodejs,
+            installer::install_openclaw,
+            installer::init_openclaw_config,
+            installer::open_install_terminal,
         ])
         .run(tauri::generate_context!())
         .expect("运行 Tauri 应用时发生错误");

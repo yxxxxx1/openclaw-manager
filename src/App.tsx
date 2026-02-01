@@ -1,5 +1,6 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { invoke } from '@tauri-apps/api/core';
 import { Sidebar } from './components/Layout/Sidebar';
 import { Header } from './components/Layout/Header';
 import { Dashboard } from './components/Dashboard';
@@ -8,11 +9,47 @@ import { Channels } from './components/Channels';
 import { ServiceManager } from './components/Service';
 import { Settings } from './components/Settings';
 import { Testing } from './components/Testing';
+import { Setup } from './components/Setup';
 
 export type PageType = 'dashboard' | 'ai' | 'channels' | 'service' | 'testing' | 'settings';
 
+interface EnvironmentStatus {
+  node_installed: boolean;
+  node_version: string | null;
+  node_version_ok: boolean;
+  openclaw_installed: boolean;
+  openclaw_version: string | null;
+  config_dir_exists: boolean;
+  ready: boolean;
+  os: string;
+}
+
 function App() {
   const [currentPage, setCurrentPage] = useState<PageType>('dashboard');
+  const [isReady, setIsReady] = useState<boolean | null>(null);
+  const [showSetup, setShowSetup] = useState(false);
+
+  // 检查环境
+  useEffect(() => {
+    const checkEnv = async () => {
+      try {
+        const status = await invoke<EnvironmentStatus>('check_environment');
+        setIsReady(status.ready);
+        setShowSetup(!status.ready);
+      } catch (e) {
+        console.error('环境检查失败:', e);
+        // 如果检查失败，尝试继续运行（可能是旧版本没有这个命令）
+        setIsReady(true);
+        setShowSetup(false);
+      }
+    };
+    checkEnv();
+  }, []);
+
+  const handleSetupComplete = () => {
+    setIsReady(true);
+    setShowSetup(false);
+  };
 
   const renderPage = () => {
     const pageVariants = {
@@ -47,6 +84,27 @@ function App() {
     );
   };
 
+  // 正在检查环境
+  if (isReady === null) {
+    return (
+      <div className="flex h-screen bg-dark-900 items-center justify-center">
+        <div className="fixed inset-0 bg-gradient-radial pointer-events-none" />
+        <div className="relative z-10 text-center">
+          <div className="inline-flex items-center justify-center w-16 h-16 rounded-xl bg-gradient-to-br from-brand-500 to-purple-600 mb-4 animate-pulse">
+            <span className="text-3xl">🦞</span>
+          </div>
+          <p className="text-dark-400">正在启动...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // 显示安装向导
+  if (showSetup) {
+    return <Setup onComplete={handleSetupComplete} />;
+  }
+
+  // 正常界面
   return (
     <div className="flex h-screen bg-dark-900 overflow-hidden">
       {/* 背景装饰 */}
