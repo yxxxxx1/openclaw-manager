@@ -1,18 +1,6 @@
 import { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
 import { invoke } from '@tauri-apps/api/core';
-import {
-  Play,
-  Square,
-  RotateCcw,
-  Activity,
-  Cpu,
-  HardDrive,
-  Clock,
-  CheckCircle,
-  XCircle,
-  AlertTriangle,
-} from 'lucide-react';
 import { StatusCard } from './StatusCard';
 import { QuickActions } from './QuickActions';
 import { SystemInfo } from './SystemInfo';

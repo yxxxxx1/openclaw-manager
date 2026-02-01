@@ -1,16 +1,13 @@
 import { useState } from 'react';
-import { motion } from 'framer-motion';
 import { invoke } from '@tauri-apps/api/core';
 import {
   User,
-  Globe,
   Shield,
   Save,
   Loader2,
   FolderOpen,
   FileCode,
 } from 'lucide-react';
-import clsx from 'clsx';
 
 export function Settings() {
   const [identity, setIdentity] = useState({

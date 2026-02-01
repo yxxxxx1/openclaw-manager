@@ -20,8 +20,6 @@ export function Header({ currentPage }: HeaderProps) {
   const handleOpenDashboard = async () => {
     // 调用 Tauri 打开 Dashboard URL
     try {
-      const { invoke } = await import('@tauri-apps/api/core');
-      // 这里可以调用后端获取带 token 的 dashboard URL
       const { open } = await import('@tauri-apps/plugin-shell');
       await open('http://localhost:18789');
     } catch (e) {

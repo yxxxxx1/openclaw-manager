@@ -1,5 +1,4 @@
 import { useEffect, useState, useRef } from 'react';
-import { motion } from 'framer-motion';
 import { invoke } from '@tauri-apps/api/core';
 import {
   Play,
@@ -14,7 +13,6 @@ import clsx from 'clsx';
 
 export function ServiceManager() {
   const [logs, setLogs] = useState<string[]>([]);
-  const [loading, setLoading] = useState(false);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [autoRefresh, setAutoRefresh] = useState(true);
   const logsEndRef = useRef<HTMLDivElement>(null);

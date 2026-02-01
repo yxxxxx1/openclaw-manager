@@ -1,4 +1,4 @@
-import { Play, Square, RotateCcw, FileText, Stethoscope } from 'lucide-react';
+import { Play, Square, RotateCcw, Stethoscope } from 'lucide-react';
 import clsx from 'clsx';
 
 interface ServiceStatus {
