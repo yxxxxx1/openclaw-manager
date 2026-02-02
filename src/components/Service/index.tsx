@@ -10,6 +10,7 @@ import {
   Loader2,
 } from 'lucide-react';
 import clsx from 'clsx';
+import { serviceLogger } from '../../lib/logger';
 
 export function ServiceManager() {
   const [logs, setLogs] = useState<string[]>([]);
@@ -17,20 +18,28 @@ export function ServiceManager() {
   const [autoRefresh, setAutoRefresh] = useState(true);
   const logsEndRef = useRef<HTMLDivElement>(null);
 
+  serviceLogger.debug('ServiceManager 组件渲染');
+
   const fetchLogs = async () => {
     try {
       const result = await invoke<string[]>('get_logs', { lines: 100 });
       setLogs(result);
+      serviceLogger.debug(`获取到 ${result.length} 行日志`);
     } catch (e) {
-      console.error('获取日志失败:', e);
+      serviceLogger.error('获取日志失败', e);
     }
   };
 
   useEffect(() => {
+    serviceLogger.info('ServiceManager 组件挂载');
     fetchLogs();
     if (autoRefresh) {
+      serviceLogger.debug('启动日志自动刷新 (间隔: 2秒)');
       const interval = setInterval(fetchLogs, 2000);
-      return () => clearInterval(interval);
+      return () => {
+        serviceLogger.debug('停止日志自动刷新');
+        clearInterval(interval);
+      };
     }
   }, [autoRefresh]);
 
@@ -41,12 +50,15 @@ export function ServiceManager() {
   }, [logs]);
 
   const handleAction = async (action: 'start' | 'stop' | 'restart') => {
+    serviceLogger.action(`服务操作: ${action}`);
+    serviceLogger.info(`正在执行: ${action}_service`);
     setActionLoading(action);
     try {
-      await invoke(`${action}_service`);
+      const result = await invoke(`${action}_service`);
+      serviceLogger.info(`✅ ${action} 操作成功`, result);
       await fetchLogs();
     } catch (e) {
-      console.error(`${action} 失败:`, e);
+      serviceLogger.error(`❌ ${action} 操作失败`, e);
       alert(`操作失败: ${e}`);
     } finally {
       setActionLoading(null);

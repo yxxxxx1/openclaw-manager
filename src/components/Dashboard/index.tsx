@@ -1,18 +1,9 @@
 import { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
-import { invoke } from '@tauri-apps/api/core';
 import { StatusCard } from './StatusCard';
 import { QuickActions } from './QuickActions';
 import { SystemInfo } from './SystemInfo';
-
-interface ServiceStatus {
-  running: boolean;
-  pid: number | null;
-  port: number;
-  uptime_seconds: number | null;
-  memory_mb: number | null;
-  cpu_percent: number | null;
-}
+import { api, ServiceStatus, isTauri } from '../../lib/tauri';
 
 export function Dashboard() {
   const [status, setStatus] = useState<ServiceStatus | null>(null);
@@ -20,11 +11,15 @@ export function Dashboard() {
   const [actionLoading, setActionLoading] = useState(false);
 
   const fetchStatus = async () => {
+    if (!isTauri()) {
+      setLoading(false);
+      return;
+    }
     try {
-      const result = await invoke<ServiceStatus>('get_service_status');
+      const result = await api.getServiceStatus();
       setStatus(result);
-    } catch (e) {
-      console.error('获取状态失败:', e);
+    } catch {
+      // 静默处理
     } finally {
       setLoading(false);
     }
@@ -32,14 +27,16 @@ export function Dashboard() {
 
   useEffect(() => {
     fetchStatus();
+    if (!isTauri()) return;
     const interval = setInterval(fetchStatus, 3000);
     return () => clearInterval(interval);
   }, []);
 
   const handleStart = async () => {
+    if (!isTauri()) return;
     setActionLoading(true);
     try {
-      await invoke('start_service');
+      await api.startService();
       await fetchStatus();
     } catch (e) {
       console.error('启动失败:', e);
@@ -49,9 +46,10 @@ export function Dashboard() {
   };
 
   const handleStop = async () => {
+    if (!isTauri()) return;
     setActionLoading(true);
     try {
-      await invoke('stop_service');
+      await api.stopService();
       await fetchStatus();
     } catch (e) {
       console.error('停止失败:', e);
@@ -61,9 +59,10 @@ export function Dashboard() {
   };
 
   const handleRestart = async () => {
+    if (!isTauri()) return;
     setActionLoading(true);
     try {
-      await invoke('restart_service');
+      await api.restartService();
       await fetchStatus();
     } catch (e) {
       console.error('重启失败:', e);

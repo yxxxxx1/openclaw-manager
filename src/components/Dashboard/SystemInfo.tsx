@@ -1,28 +1,22 @@
 import { useEffect, useState } from 'react';
-import { invoke } from '@tauri-apps/api/core';
 import { Monitor, Package, Folder, CheckCircle, XCircle } from 'lucide-react';
-
-interface SystemInfoData {
-  os: string;
-  os_version: string;
-  arch: string;
-  openclaw_installed: boolean;
-  openclaw_version: string | null;
-  node_version: string | null;
-  config_dir: string;
-}
+import { api, SystemInfo as SystemInfoType, isTauri } from '../../lib/tauri';
 
 export function SystemInfo() {
-  const [info, setInfo] = useState<SystemInfoData | null>(null);
+  const [info, setInfo] = useState<SystemInfoType | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const fetchInfo = async () => {
+      if (!isTauri()) {
+        setLoading(false);
+        return;
+      }
       try {
-        const result = await invoke<SystemInfoData>('get_system_info');
+        const result = await api.getSystemInfo();
         setInfo(result);
-      } catch (e) {
-        console.error('获取系统信息失败:', e);
+      } catch {
+        // 静默处理
       } finally {
         setLoading(false);
       }

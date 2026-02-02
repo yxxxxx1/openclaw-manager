@@ -3,6 +3,7 @@ use crate::utils::{file, platform};
 use serde_json::{json, Value};
 use std::collections::HashMap;
 use tauri::command;
+use log::{info, warn, error, debug};
 
 /// 获取 openclaw.json 配置
 fn load_openclaw_config() -> Result<Value, String> {
@@ -33,38 +34,69 @@ fn save_openclaw_config(config: &Value) -> Result<(), String> {
 /// 获取完整配置
 #[command]
 pub async fn get_config() -> Result<Value, String> {
-    load_openclaw_config()
+    info!("[获取配置] 读取 openclaw.json 配置...");
+    let result = load_openclaw_config();
+    match &result {
+        Ok(_) => info!("[获取配置] ✓ 配置读取成功"),
+        Err(e) => error!("[获取配置] ✗ 配置读取失败: {}", e),
+    }
+    result
 }
 
 /// 保存配置
 #[command]
 pub async fn save_config(config: Value) -> Result<String, String> {
-    save_openclaw_config(&config)?;
-    Ok("配置已保存".to_string())
+    info!("[保存配置] 保存 openclaw.json 配置...");
+    debug!("[保存配置] 配置内容: {}", serde_json::to_string_pretty(&config).unwrap_or_default());
+    match save_openclaw_config(&config) {
+        Ok(_) => {
+            info!("[保存配置] ✓ 配置保存成功");
+            Ok("配置已保存".to_string())
+        }
+        Err(e) => {
+            error!("[保存配置] ✗ 配置保存失败: {}", e);
+            Err(e)
+        }
+    }
 }
 
 /// 获取环境变量值
 #[command]
 pub async fn get_env_value(key: String) -> Result<Option<String>, String> {
+    info!("[获取环境变量] 读取环境变量: {}", key);
     let env_path = platform::get_env_file_path();
-    Ok(file::read_env_value(&env_path, &key))
+    let value = file::read_env_value(&env_path, &key);
+    match &value {
+        Some(v) => debug!("[获取环境变量] {}={} (已脱敏)", key, if v.len() > 8 { "***" } else { v }),
+        None => debug!("[获取环境变量] {} 不存在", key),
+    }
+    Ok(value)
 }
 
 /// 保存环境变量值
 #[command]
 pub async fn save_env_value(key: String, value: String) -> Result<String, String> {
+    info!("[保存环境变量] 保存环境变量: {}", key);
     let env_path = platform::get_env_file_path();
+    debug!("[保存环境变量] 环境文件路径: {}", env_path);
     
-    file::set_env_value(&env_path, &key, &value)
-        .map_err(|e| format!("保存环境变量失败: {}", e))?;
-    
-    Ok("环境变量已保存".to_string())
+    match file::set_env_value(&env_path, &key, &value) {
+        Ok(_) => {
+            info!("[保存环境变量] ✓ 环境变量 {} 保存成功", key);
+            Ok("环境变量已保存".to_string())
+        }
+        Err(e) => {
+            error!("[保存环境变量] ✗ 保存失败: {}", e);
+            Err(format!("保存环境变量失败: {}", e))
+        }
+    }
 }
 
 /// 获取所有支持的 AI Provider
 #[command]
 pub async fn get_ai_providers() -> Result<Vec<AIProviderOption>, String> {
-    Ok(vec![
+    info!("[AI Provider] 获取支持的 AI Provider 列表...");
+    let providers = vec![
         AIProviderOption {
             id: "anthropic".to_string(),
             name: "Anthropic Claude".to_string(),
@@ -239,15 +271,20 @@ pub async fn get_ai_providers() -> Result<Vec<AIProviderOption>, String> {
                 },
             ],
         },
-    ])
+    ];
+    info!("[AI Provider] ✓ 返回 {} 个 Provider", providers.len());
+    Ok(providers)
 }
 
 /// 获取渠道配置 - 从 openclaw.json 和 env 文件读取
 #[command]
 pub async fn get_channels_config() -> Result<Vec<ChannelConfig>, String> {
+    info!("[渠道配置] 获取渠道配置列表...");
+    
     let config = load_openclaw_config()?;
     let channels_obj = config.get("channels").cloned().unwrap_or(json!({}));
     let env_path = platform::get_env_file_path();
+    debug!("[渠道配置] 环境文件路径: {}", env_path);
     
     let mut channels = Vec::new();
     
@@ -304,6 +341,10 @@ pub async fn get_channels_config() -> Result<Vec<ChannelConfig>, String> {
         });
     }
     
+    info!("[渠道配置] ✓ 返回 {} 个渠道配置", channels.len());
+    for ch in &channels {
+        debug!("[渠道配置] - {}: enabled={}", ch.id, ch.enabled);
+    }
     Ok(channels)
 }
 
@@ -311,8 +352,11 @@ pub async fn get_channels_config() -> Result<Vec<ChannelConfig>, String> {
 /// 注意：某些字段（如 userId, testChatId 等）只用于测试，保存到 env 文件
 #[command]
 pub async fn save_channel_config(channel: ChannelConfig) -> Result<String, String> {
+    info!("[保存渠道配置] 保存渠道配置: {} ({})", channel.id, channel.channel_type);
+    
     let mut config = load_openclaw_config()?;
     let env_path = platform::get_env_file_path();
+    debug!("[保存渠道配置] 环境文件路径: {}", env_path);
     
     // 确保 channels 对象存在
     if config.get("channels").is_none() {
@@ -372,7 +416,15 @@ pub async fn save_channel_config(channel: ChannelConfig) -> Result<String, Strin
     });
     
     // 保存配置
-    save_openclaw_config(&config)?;
-    
-    Ok(format!("{} 配置已保存", channel.channel_type))
+    info!("[保存渠道配置] 写入配置文件...");
+    match save_openclaw_config(&config) {
+        Ok(_) => {
+            info!("[保存渠道配置] ✓ {} 配置保存成功", channel.channel_type);
+            Ok(format!("{} 配置已保存", channel.channel_type))
+        }
+        Err(e) => {
+            error!("[保存渠道配置] ✗ 保存失败: {}", e);
+            Err(e)
+        }
+    }
 }

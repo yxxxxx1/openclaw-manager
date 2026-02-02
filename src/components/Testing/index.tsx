@@ -15,6 +15,7 @@ import {
   MessagesSquare,
 } from 'lucide-react';
 import clsx from 'clsx';
+import { testingLogger } from '../../lib/logger';
 
 interface DiagnosticResult {
   name: string;
@@ -55,13 +56,18 @@ export function Testing() {
   const [loading, setLoading] = useState<string | null>(null);
 
   const runDiagnostics = async () => {
+    testingLogger.action('运行系统诊断');
+    testingLogger.info('开始系统诊断...');
     setLoading('diagnostics');
     setDiagnosticResults([]);
     try {
       const results = await invoke<DiagnosticResult[]>('run_doctor');
+      testingLogger.info(`诊断完成，共 ${results.length} 项检查`);
+      const passed = results.filter(r => r.passed).length;
+      testingLogger.state('诊断结果', { total: results.length, passed, failed: results.length - passed });
       setDiagnosticResults(results);
     } catch (e) {
-      console.error('诊断失败:', e);
+      testingLogger.error('诊断执行失败', e);
       setDiagnosticResults([{
         name: '诊断执行',
         passed: false,
@@ -74,13 +80,20 @@ export function Testing() {
   };
 
   const runAITest = async () => {
+    testingLogger.action('测试 AI 连接');
+    testingLogger.info('开始测试 AI 连接...');
     setLoading('ai');
     setAiTestResult(null);
     try {
       const result = await invoke<AITestResult>('test_ai_connection');
+      if (result.success) {
+        testingLogger.info(`✅ AI 连接测试成功，延迟: ${result.latency_ms}ms`);
+      } else {
+        testingLogger.warn(`❌ AI 连接测试失败: ${result.error}`);
+      }
       setAiTestResult(result);
     } catch (e) {
-      console.error('AI 测试失败:', e);
+      testingLogger.error('AI 测试失败', e);
       setAiTestResult({
         success: false,
         provider: 'unknown',
@@ -95,6 +108,8 @@ export function Testing() {
   };
 
   const runChannelTest = async (channelId: string) => {
+    testingLogger.action(`测试渠道: ${channelId}`);
+    testingLogger.info(`开始测试渠道 ${channelId}...`);
     setLoading(`channel-${channelId}`);
     
     // 清除之前的结果
@@ -108,12 +123,17 @@ export function Testing() {
       const result = await invoke<ChannelTestResult>('test_channel', { 
         channelType: channelId 
       });
+      if (result.success) {
+        testingLogger.info(`✅ 渠道 ${channelId} 测试成功`);
+      } else {
+        testingLogger.warn(`❌ 渠道 ${channelId} 测试失败: ${result.error}`);
+      }
       setChannelResults((prev) => ({
         ...prev,
         [channelId]: result,
       }));
     } catch (e) {
-      console.error(`${channelId} 测试失败:`, e);
+      testingLogger.error(`渠道 ${channelId} 测试失败`, e);
       setChannelResults((prev) => ({
         ...prev,
         [channelId]: {

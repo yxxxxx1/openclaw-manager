@@ -1,6 +1,7 @@
 use crate::utils::{platform, shell};
 use serde::{Deserialize, Serialize};
 use tauri::command;
+use log::{info, warn, error, debug};
 
 /// 环境检查结果
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -43,22 +44,33 @@ pub struct InstallResult {
 /// 检查环境状态
 #[command]
 pub async fn check_environment() -> Result<EnvironmentStatus, String> {
+    info!("[环境检查] 开始检查系统环境...");
+    
     let os = platform::get_os();
+    info!("[环境检查] 操作系统: {}", os);
     
     // 检查 Node.js
+    info!("[环境检查] 检查 Node.js...");
     let node_version = get_node_version();
     let node_installed = node_version.is_some();
     let node_version_ok = check_node_version_requirement(&node_version);
+    info!("[环境检查] Node.js: installed={}, version={:?}, version_ok={}", 
+        node_installed, node_version, node_version_ok);
     
     // 检查 OpenClaw
+    info!("[环境检查] 检查 OpenClaw...");
     let openclaw_version = get_openclaw_version();
     let openclaw_installed = openclaw_version.is_some();
+    info!("[环境检查] OpenClaw: installed={}, version={:?}", 
+        openclaw_installed, openclaw_version);
     
     // 检查配置目录
     let config_dir = platform::get_config_dir();
     let config_dir_exists = std::path::Path::new(&config_dir).exists();
+    info!("[环境检查] 配置目录: {}, exists={}", config_dir, config_dir_exists);
     
     let ready = node_installed && node_version_ok && openclaw_installed;
+    info!("[环境检查] 环境就绪状态: ready={}", ready);
     
     Ok(EnvironmentStatus {
         node_installed,
@@ -87,15 +99,10 @@ fn get_node_version() -> Option<String> {
 
 /// 获取 OpenClaw 版本
 fn get_openclaw_version() -> Option<String> {
-    if platform::is_windows() {
-        shell::run_powershell_output("openclaw --version 2>$null")
-            .ok()
-            .map(|v| v.trim().to_string())
-    } else {
-        shell::run_command_output("openclaw", &["--version"])
-            .ok()
-            .map(|v| v.trim().to_string())
-    }
+    // 使用 run_openclaw 统一处理各平台
+    shell::run_openclaw(&["--version"])
+        .ok()
+        .map(|v| v.trim().to_string())
 }
 
 /// 检查 Node.js 版本是否 >= 22
@@ -116,18 +123,40 @@ fn check_node_version_requirement(version: &Option<String>) -> bool {
 /// 安装 Node.js
 #[command]
 pub async fn install_nodejs() -> Result<InstallResult, String> {
+    info!("[安装Node.js] 开始安装 Node.js...");
     let os = platform::get_os();
+    info!("[安装Node.js] 检测到操作系统: {}", os);
     
-    match os.as_str() {
-        "windows" => install_nodejs_windows().await,
-        "macos" => install_nodejs_macos().await,
-        "linux" => install_nodejs_linux().await,
-        _ => Ok(InstallResult {
-            success: false,
-            message: "不支持的操作系统".to_string(),
-            error: Some(format!("不支持的操作系统: {}", os)),
-        }),
+    let result = match os.as_str() {
+        "windows" => {
+            info!("[安装Node.js] 使用 Windows 安装方式...");
+            install_nodejs_windows().await
+        },
+        "macos" => {
+            info!("[安装Node.js] 使用 macOS 安装方式 (Homebrew)...");
+            install_nodejs_macos().await
+        },
+        "linux" => {
+            info!("[安装Node.js] 使用 Linux 安装方式...");
+            install_nodejs_linux().await
+        },
+        _ => {
+            error!("[安装Node.js] 不支持的操作系统: {}", os);
+            Ok(InstallResult {
+                success: false,
+                message: "不支持的操作系统".to_string(),
+                error: Some(format!("不支持的操作系统: {}", os)),
+            })
+        },
+    };
+    
+    match &result {
+        Ok(r) if r.success => info!("[安装Node.js] ✓ 安装成功"),
+        Ok(r) => warn!("[安装Node.js] ✗ 安装失败: {}", r.message),
+        Err(e) => error!("[安装Node.js] ✗ 安装错误: {}", e),
     }
+    
+    result
 }
 
 /// Windows 安装 Node.js
@@ -289,12 +318,28 @@ node --version
 /// 安装 OpenClaw
 #[command]
 pub async fn install_openclaw() -> Result<InstallResult, String> {
+    info!("[安装OpenClaw] 开始安装 OpenClaw...");
     let os = platform::get_os();
+    info!("[安装OpenClaw] 检测到操作系统: {}", os);
     
-    match os.as_str() {
-        "windows" => install_openclaw_windows().await,
-        _ => install_openclaw_unix().await,
+    let result = match os.as_str() {
+        "windows" => {
+            info!("[安装OpenClaw] 使用 Windows 安装方式...");
+            install_openclaw_windows().await
+        },
+        _ => {
+            info!("[安装OpenClaw] 使用 Unix 安装方式 (npm)...");
+            install_openclaw_unix().await
+        },
+    };
+    
+    match &result {
+        Ok(r) if r.success => info!("[安装OpenClaw] ✓ 安装成功"),
+        Ok(r) => warn!("[安装OpenClaw] ✗ 安装失败: {}", r.message),
+        Err(e) => error!("[安装OpenClaw] ✗ 安装错误: {}", e),
     }
+    
+    result
 }
 
 /// Windows 安装 OpenClaw
@@ -310,7 +355,7 @@ if (-not $nodeVersion) {
 }
 
 Write-Host "使用 npm 安装 OpenClaw..."
-npm install -g openclaw@latest
+npm install -g openclaw@latest --unsafe-perm
 
 # 验证安装
 $openclawVersion = openclaw --version 2>$null
@@ -357,7 +402,7 @@ if ! command -v node &> /dev/null; then
 fi
 
 echo "使用 npm 安装 OpenClaw..."
-npm install -g openclaw@latest
+npm install -g openclaw@latest --unsafe-perm
 
 # 验证安装
 openclaw --version
@@ -380,10 +425,15 @@ openclaw --version
 /// 初始化 OpenClaw 配置
 #[command]
 pub async fn init_openclaw_config() -> Result<InstallResult, String> {
+    info!("[初始化配置] 开始初始化 OpenClaw 配置...");
+    
     let config_dir = platform::get_config_dir();
+    info!("[初始化配置] 配置目录: {}", config_dir);
     
     // 创建配置目录
+    info!("[初始化配置] 创建配置目录...");
     if let Err(e) = std::fs::create_dir_all(&config_dir) {
+        error!("[初始化配置] ✗ 创建配置目录失败: {}", e);
         return Ok(InstallResult {
             success: false,
             message: "创建配置目录失败".to_string(),
@@ -395,7 +445,9 @@ pub async fn init_openclaw_config() -> Result<InstallResult, String> {
     let subdirs = ["agents/main/sessions", "agents/main/agent", "credentials"];
     for subdir in subdirs {
         let path = format!("{}/{}", config_dir, subdir);
+        info!("[初始化配置] 创建子目录: {}", subdir);
         if let Err(e) = std::fs::create_dir_all(&path) {
+            error!("[初始化配置] ✗ 创建目录失败: {} - {}", subdir, e);
             return Ok(InstallResult {
                 success: false,
                 message: format!("创建目录失败: {}", subdir),
@@ -404,24 +456,45 @@ pub async fn init_openclaw_config() -> Result<InstallResult, String> {
         }
     }
     
+    // 设置配置目录权限为 700（与 shell 脚本 chmod 700 一致）
+    // 仅在 Unix 系统上执行
+    #[cfg(unix)]
+    {
+        info!("[初始化配置] 设置目录权限为 700...");
+        use std::os::unix::fs::PermissionsExt;
+        if let Ok(metadata) = std::fs::metadata(&config_dir) {
+            let mut perms = metadata.permissions();
+            perms.set_mode(0o700);
+            if let Err(e) = std::fs::set_permissions(&config_dir, perms) {
+                warn!("[初始化配置] 设置权限失败: {}", e);
+            } else {
+                info!("[初始化配置] ✓ 权限设置成功");
+            }
+        }
+    }
+    
     // 设置 gateway mode 为 local
-    let result = if platform::is_windows() {
-        shell::run_powershell_output("openclaw config set gateway.mode local 2>$null")
-    } else {
-        shell::run_bash_output("openclaw config set gateway.mode local 2>/dev/null")
-    };
+    info!("[初始化配置] 执行: openclaw config set gateway.mode local");
+    let result = shell::run_openclaw(&["config", "set", "gateway.mode", "local"]);
     
     match result {
-        Ok(_) => Ok(InstallResult {
-            success: true,
-            message: "配置初始化成功！".to_string(),
-            error: None,
-        }),
-        Err(e) => Ok(InstallResult {
-            success: false,
-            message: "配置初始化失败".to_string(),
-            error: Some(e),
-        }),
+        Ok(output) => {
+            info!("[初始化配置] ✓ 配置初始化成功");
+            debug!("[初始化配置] 命令输出: {}", output);
+            Ok(InstallResult {
+                success: true,
+                message: "配置初始化成功！".to_string(),
+                error: None,
+            })
+        },
+        Err(e) => {
+            error!("[初始化配置] ✗ 配置初始化失败: {}", e);
+            Ok(InstallResult {
+                success: false,
+                message: "配置初始化失败".to_string(),
+                error: Some(e),
+            })
+        },
     }
 }
 

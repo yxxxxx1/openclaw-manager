@@ -2,17 +2,16 @@ import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { invoke } from '@tauri-apps/api/core';
 import { 
-  CheckCircle2, 
-  XCircle, 
+  CheckCircle2,
   Loader2, 
-  Download, 
-  Terminal,
+  Download,
   ArrowRight,
   RefreshCw,
   ExternalLink,
   Cpu,
   Package
 } from 'lucide-react';
+import { setupLogger } from '../../lib/logger';
 
 interface EnvironmentStatus {
   node_installed: boolean;
@@ -43,20 +42,25 @@ export function Setup({ onComplete }: SetupProps) {
   const [step, setStep] = useState<'check' | 'install' | 'complete'>('check');
 
   const checkEnvironment = async () => {
+    setupLogger.info('检查系统环境...');
     setChecking(true);
     setError(null);
     try {
       const status = await invoke<EnvironmentStatus>('check_environment');
+      setupLogger.state('环境状态', status);
       setEnvStatus(status);
       
       if (status.ready) {
+        setupLogger.info('✅ 环境就绪');
         setStep('complete');
         // 延迟一下再跳转，让用户看到成功状态
         setTimeout(() => onComplete(), 1500);
       } else {
+        setupLogger.warn('环境未就绪，需要安装依赖');
         setStep('install');
       }
     } catch (e) {
+      setupLogger.error('检查环境失败', e);
       setError(`检查环境失败: ${e}`);
     } finally {
       setChecking(false);
@@ -64,10 +68,13 @@ export function Setup({ onComplete }: SetupProps) {
   };
 
   useEffect(() => {
+    setupLogger.info('Setup 组件初始化');
     checkEnvironment();
   }, []);
 
   const handleInstallNodejs = async () => {
+    setupLogger.action('安装 Node.js');
+    setupLogger.info('开始安装 Node.js...');
     setInstalling('nodejs');
     setError(null);
     
@@ -76,6 +83,7 @@ export function Setup({ onComplete }: SetupProps) {
       const result = await invoke<InstallResult>('install_nodejs');
       
       if (result.success) {
+        setupLogger.info('✅ Node.js 安装成功');
         // 重新检查环境
         await checkEnvironment();
       } else if (result.message.includes('重启')) {
@@ -100,6 +108,8 @@ export function Setup({ onComplete }: SetupProps) {
   };
 
   const handleInstallOpenclaw = async () => {
+    setupLogger.action('安装 OpenClaw');
+    setupLogger.info('开始安装 OpenClaw...');
     setInstalling('openclaw');
     setError(null);
     
@@ -107,16 +117,20 @@ export function Setup({ onComplete }: SetupProps) {
       const result = await invoke<InstallResult>('install_openclaw');
       
       if (result.success) {
+        setupLogger.info('✅ OpenClaw 安装成功，初始化配置...');
         // 初始化配置
         await invoke<InstallResult>('init_openclaw_config');
+        setupLogger.info('✅ 配置初始化完成');
         // 重新检查环境
         await checkEnvironment();
       } else {
+        setupLogger.warn('自动安装失败，打开终端手动安装');
         // 打开终端手动安装
         await invoke<string>('open_install_terminal', { installType: 'openclaw' });
         setError('已打开安装终端，请在终端中完成安装后点击"重新检查"');
       }
     } catch (e) {
+      setupLogger.error('安装失败，尝试打开终端', e);
       try {
         await invoke<string>('open_install_terminal', { installType: 'openclaw' });
         setError('已打开安装终端，请在终端中完成安装后点击"重新检查"');

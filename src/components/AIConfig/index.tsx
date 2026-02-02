@@ -3,6 +3,7 @@ import { motion } from 'framer-motion';
 import { invoke } from '@tauri-apps/api/core';
 import { Check, Eye, EyeOff, Loader2, RefreshCw } from 'lucide-react';
 import clsx from 'clsx';
+import { aiLogger } from '../../lib/logger';
 
 interface AIModelOption {
   id: string;
@@ -69,17 +70,22 @@ export function AIConfig() {
 
   useEffect(() => {
     const init = async () => {
+      aiLogger.info('AIConfig 组件初始化...');
       try {
         // 获取 Provider 列表
+        aiLogger.debug('获取 AI Provider 列表...');
         const result = await invoke<AIProviderOption[]>('get_ai_providers');
+        aiLogger.info(`加载了 ${result.length} 个 AI Provider`);
         setProviders(result);
         
         // 加载已保存的配置
+        aiLogger.debug('加载已保存的配置...');
         const configs = await loadSavedConfigs();
         
         // 自动选择已配置的 provider
         for (const [providerId, config] of Object.entries(configs)) {
           if (config.apiKey) {
+            aiLogger.info(`检测到已配置的 Provider: ${providerId}`);
             setSelectedProvider(providerId);
             setApiKey(config.apiKey);
             setBaseUrl(config.baseUrl);
@@ -88,13 +94,15 @@ export function AIConfig() {
             const provider = result.find((p) => p.id === providerId);
             if (provider) {
               const recommended = provider.models.find((m) => m.recommended);
-              setSelectedModel(recommended?.id || provider.models[0]?.id || '');
+              const modelId = recommended?.id || provider.models[0]?.id || '';
+              setSelectedModel(modelId);
+              aiLogger.debug(`设置默认模型: ${modelId}`);
             }
             break;
           }
         }
       } catch (e) {
-        console.error('初始化失败:', e);
+        aiLogger.error('初始化失败', e);
       } finally {
         setLoading(false);
       }
@@ -106,6 +114,7 @@ export function AIConfig() {
   const currentProvider = providers.find((p) => p.id === selectedProvider);
 
   const handleProviderSelect = (providerId: string) => {
+    aiLogger.action('选择 Provider', { providerId });
     setSelectedProvider(providerId);
     const provider = providers.find((p) => p.id === providerId);
     
@@ -113,33 +122,41 @@ export function AIConfig() {
       // 优先使用已保存的配置
       const saved = savedConfigs[providerId];
       if (saved?.apiKey) {
+        aiLogger.debug('使用已保存的配置');
         setApiKey(saved.apiKey);
         setBaseUrl(saved.baseUrl);
       } else {
         // 没有保存的配置时，清空并使用默认值作为 placeholder
+        aiLogger.debug('无已保存配置，使用默认值');
         setApiKey('');
         setBaseUrl('');
       }
       
       // 设置推荐模型
       const recommended = provider.models.find((m) => m.recommended);
-      setSelectedModel(recommended?.id || provider.models[0]?.id || '');
+      const modelId = recommended?.id || provider.models[0]?.id || '';
+      setSelectedModel(modelId);
+      aiLogger.debug(`设置模型: ${modelId}`);
     }
   };
 
   const handleSave = async () => {
     if (!selectedProvider || !selectedModel) return;
     
+    aiLogger.action('保存 AI 配置', { provider: selectedProvider, model: selectedModel });
+    aiLogger.info('正在保存配置...');
     setSaving(true);
     try {
       const keys = ENV_KEY_MAP[selectedProvider];
       
       // 保存 API Key
       if (apiKey) {
+        aiLogger.debug(`保存 API Key: ${keys.apiKey}`);
         await invoke('save_env_value', { key: keys.apiKey, value: apiKey });
       }
       
       // 保存 Base URL（即使是空的也保存，以便清除旧配置）
+      aiLogger.debug(`保存 Base URL: ${keys.baseUrl}`);
       await invoke('save_env_value', { key: keys.baseUrl, value: baseUrl });
       
       // 更新本地缓存
@@ -148,9 +165,10 @@ export function AIConfig() {
         [selectedProvider]: { apiKey, baseUrl },
       }));
       
+      aiLogger.info('✅ 配置保存成功');
       alert('配置已保存！请重启服务使配置生效。');
     } catch (e) {
-      console.error('保存失败:', e);
+      aiLogger.error('❌ 保存配置失败', e);
       alert('保存失败: ' + e);
     } finally {
       setSaving(false);

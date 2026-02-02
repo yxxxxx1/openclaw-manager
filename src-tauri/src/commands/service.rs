@@ -1,179 +1,136 @@
 use crate::models::ServiceStatus;
-use crate::utils::{file, platform, shell};
+use crate::utils::shell;
 use tauri::command;
+use std::process::Command;
+use log::{info, debug};
 
-/// 获取服务状态
+const SERVICE_PORT: u16 = 18789;
+
+/// 检测端口是否有服务在监听，返回 PID
+/// 简单直接：端口被占用 = 服务运行中
+fn check_port_listening(port: u16) -> Option<u32> {
+    #[cfg(unix)]
+    {
+        let output = Command::new("lsof")
+            .args(["-ti", &format!(":{}", port)])
+            .output()
+            .ok()?;
+        
+        if output.status.success() {
+            String::from_utf8_lossy(&output.stdout)
+                .lines()
+                .next()
+                .and_then(|line| line.trim().parse::<u32>().ok())
+        } else {
+            None
+        }
+    }
+    
+    #[cfg(windows)]
+    {
+        let output = Command::new("netstat")
+            .args(["-ano"])
+            .output()
+            .ok()?;
+        
+        if output.status.success() {
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            for line in stdout.lines() {
+                if line.contains(&format!(":{}", port)) && line.contains("LISTENING") {
+                    if let Some(pid_str) = line.split_whitespace().last() {
+                        if let Ok(pid) = pid_str.parse::<u32>() {
+                            return Some(pid);
+                        }
+                    }
+                }
+            }
+        }
+        None
+    }
+}
+
+/// 获取服务状态（简单版：直接检查端口占用）
 #[command]
 pub async fn get_service_status() -> Result<ServiceStatus, String> {
-    // 尝试使用 openclaw gateway status 获取状态
-    let status_result = shell::run_openclaw(&["gateway", "status"]);
-    
-    let (running, pid) = match &status_result {
-        Ok(output) => {
-            // 解析输出判断是否运行
-            let is_running = output.contains("running") || output.contains("listening");
-            // 尝试从输出中提取 PID
-            let pid = extract_pid_from_status(output);
-            (is_running, pid)
-        }
-        Err(_) => {
-            // 如果 openclaw 命令失败，回退到进程检测
-            detect_gateway_process()
-        }
-    };
-    
-    // 获取内存使用（仅在运行时）
-    let memory_mb = if let Some(p) = pid {
-        get_process_memory(p)
-    } else {
-        None
-    };
+    // 简单直接：检查端口是否被占用
+    let pid = check_port_listening(SERVICE_PORT);
+    let running = pid.is_some();
     
     Ok(ServiceStatus {
         running,
         pid,
-        port: 18789,
+        port: SERVICE_PORT,
         uptime_seconds: None,
-        memory_mb,
+        memory_mb: None,
         cpu_percent: None,
     })
-}
-
-/// 从状态输出中提取 PID
-fn extract_pid_from_status(output: &str) -> Option<u32> {
-    // 尝试匹配 "pid: 12345" 或 "PID: 12345" 格式
-    for line in output.lines() {
-        let lower = line.to_lowercase();
-        if lower.contains("pid") {
-            if let Some(num) = line.split_whitespace()
-                .filter_map(|s| s.trim_matches(|c: char| !c.is_numeric()).parse::<u32>().ok())
-                .next() 
-            {
-                return Some(num);
-            }
-        }
-    }
-    None
-}
-
-/// 通过进程检测 gateway 是否运行
-fn detect_gateway_process() -> (bool, Option<u32>) {
-    if platform::is_windows() {
-        let result = shell::run_powershell_output(
-            "Get-CimInstance Win32_Process | Where-Object { $_.Name -like '*node*' -and $_.CommandLine -like '*gateway*' } | Select-Object -First 1 -ExpandProperty ProcessId"
-        );
-        match result {
-            Ok(ref output) if !output.is_empty() => {
-                let pid = output.trim().parse::<u32>().ok();
-                (pid.is_some(), pid)
-            }
-            _ => (false, None),
-        }
-    } else {
-        let result = shell::run_command_output("pgrep", &["-f", "openclaw.*gateway"]);
-        match result {
-            Ok(ref output) if !output.is_empty() => {
-                let pid = output.lines().next().and_then(|s| s.parse::<u32>().ok());
-                (pid.is_some(), pid)
-            }
-            _ => (false, None),
-        }
-    }
-}
-
-/// 获取进程内存使用量
-fn get_process_memory(pid: u32) -> Option<f64> {
-    if platform::is_windows() {
-        shell::run_powershell_output(&format!(
-            "(Get-Process -Id {} -ErrorAction SilentlyContinue).WorkingSet64 / 1MB",
-            pid
-        ))
-        .ok()
-        .and_then(|s| s.trim().parse::<f64>().ok())
-    } else {
-        shell::run_bash_output(&format!("ps -o rss= -p {}", pid))
-            .ok()
-            .and_then(|s| s.trim().parse::<f64>().ok())
-            .map(|kb| kb / 1024.0)
-    }
 }
 
 /// 启动服务
 #[command]
 pub async fn start_service() -> Result<String, String> {
+    info!("[服务] 启动服务...");
+    
     // 检查是否已经运行
     let status = get_service_status().await?;
     if status.running {
+        info!("[服务] 服务已在运行中");
         return Err("服务已在运行中".to_string());
     }
     
     // 检查 openclaw 命令是否存在
-    if shell::get_openclaw_path().is_none() {
+    let openclaw_path = shell::get_openclaw_path();
+    if openclaw_path.is_none() {
+        info!("[服务] 找不到 openclaw 命令");
         return Err("找不到 openclaw 命令，请先通过 npm install -g openclaw 安装".to_string());
     }
+    info!("[服务] openclaw 路径: {:?}", openclaw_path);
     
-    // 使用 openclaw 自己的命令启动 gateway
+    // 直接后台启动 gateway（不等待 doctor，避免阻塞）
+    info!("[服务] 后台启动 gateway...");
     shell::spawn_openclaw_gateway()
         .map_err(|e| format!("启动服务失败: {}", e))?;
     
-    // 等待启动
-    std::thread::sleep(std::time::Duration::from_secs(2));
-    
-    // 检查状态
-    let new_status = get_service_status().await?;
-    if new_status.running {
-        Ok(format!("服务已启动，PID: {:?}", new_status.pid))
-    } else {
-        // 尝试获取更多信息
-        let log_file = platform::get_log_file_path();
-        let log_content = file::read_last_lines(&log_file, 10).unwrap_or_default();
-        if log_content.is_empty() {
-            Err("服务启动失败，请检查 openclaw 是否正确安装".to_string())
-        } else {
-            Err(format!("服务启动失败:\n{}", log_content.join("\n")))
+    // 轮询等待端口开始监听（最多 15 秒）
+    info!("[服务] 等待端口 {} 开始监听...", SERVICE_PORT);
+    for i in 1..=15 {
+        std::thread::sleep(std::time::Duration::from_secs(1));
+        if let Some(pid) = check_port_listening(SERVICE_PORT) {
+            info!("[服务] ✓ 启动成功 ({}秒), PID: {}", i, pid);
+            return Ok(format!("服务已启动，PID: {}", pid));
+        }
+        if i % 3 == 0 {
+            debug!("[服务] 等待中... ({}秒)", i);
         }
     }
+    
+    info!("[服务] 等待超时，端口仍未监听");
+    Err("服务启动超时（15秒），请检查 openclaw 日志".to_string())
 }
 
 /// 停止服务
 #[command]
 pub async fn stop_service() -> Result<String, String> {
-    // 使用 openclaw 命令停止
-    let _ = shell::run_openclaw(&["gateway", "stop"]);
+    info!("[服务] 停止服务...");
     
-    // 等待
+    let _ = shell::run_openclaw(&["gateway", "stop"]);
     std::thread::sleep(std::time::Duration::from_millis(500));
     
-    // 检查是否停止
     let status = get_service_status().await?;
     if !status.running {
+        info!("[服务] ✓ 已停止");
         return Ok("服务已停止".to_string());
     }
     
-    // 如果还在运行，强制杀死进程
-    if let Some(pid) = status.pid {
-        if platform::is_windows() {
-            let _ = shell::run_powershell_output(&format!("Stop-Process -Id {} -Force", pid));
-        } else {
-            let _ = shell::run_command("kill", &["-9", &pid.to_string()]);
-        }
-    } else {
-        // 没有 PID，尝试通过进程名杀死
-        if platform::is_windows() {
-            let _ = shell::run_powershell_output(
-                "Get-CimInstance Win32_Process | Where-Object { $_.Name -like '*node*' -and $_.CommandLine -like '*gateway*' } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force }"
-            );
-        } else {
-            let _ = shell::run_command("pkill", &["-9", "-f", "openclaw.*gateway"]);
-        }
-    }
-    
+    // 尝试强制停止
+    let _ = shell::run_openclaw(&["gateway", "stop", "--force"]);
     std::thread::sleep(std::time::Duration::from_millis(500));
     
     let status = get_service_status().await?;
     if status.running {
-        Err("无法停止服务，请手动处理".to_string())
+        Err(format!("无法停止服务，PID: {:?}", status.pid))
     } else {
+        info!("[服务] ✓ 已停止");
         Ok("服务已停止".to_string())
     }
 }
@@ -181,22 +138,32 @@ pub async fn stop_service() -> Result<String, String> {
 /// 重启服务
 #[command]
 pub async fn restart_service() -> Result<String, String> {
-    // 先停止
-    let _ = stop_service().await;
+    info!("[服务] 重启服务...");
     
-    // 等待端口释放
+    let _ = shell::run_openclaw(&["gateway", "restart"]);
     std::thread::sleep(std::time::Duration::from_secs(2));
     
-    // 再启动
-    start_service().await
+    let status = get_service_status().await?;
+    if status.running {
+        info!("[服务] ✓ 重启成功, PID: {:?}", status.pid);
+        Ok(format!("服务已重启，PID: {:?}", status.pid))
+    } else {
+        // 手动停止再启动
+        let _ = stop_service().await;
+        std::thread::sleep(std::time::Duration::from_secs(1));
+        start_service().await
+    }
 }
 
 /// 获取日志
 #[command]
 pub async fn get_logs(lines: Option<u32>) -> Result<Vec<String>, String> {
-    let log_file = platform::get_log_file_path();
-    let n = lines.unwrap_or(100) as usize;
+    let n = lines.unwrap_or(100);
     
-    file::read_last_lines(&log_file, n)
-        .map_err(|e| format!("读取日志失败: {}", e))
+    match shell::run_openclaw(&["logs", "--lines", &n.to_string()]) {
+        Ok(output) => {
+            Ok(output.lines().map(|s| s.to_string()).collect())
+        }
+        Err(e) => Err(format!("读取日志失败: {}", e))
+    }
 }

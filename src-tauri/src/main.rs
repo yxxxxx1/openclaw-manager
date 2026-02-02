@@ -11,8 +11,12 @@ mod utils;
 use commands::{config, diagnostics, process, service};
 
 fn main() {
-    // 初始化日志
-    env_logger::init();
+    // 初始化日志 - 默认显示 info 级别日志
+    env_logger::Builder::from_env(
+        env_logger::Env::default().default_filter_or("info")
+    ).init();
+    
+    log::info!("🦞 OpenClaw Manager 启动");
 
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
