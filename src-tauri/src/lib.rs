@@ -41,6 +41,9 @@ pub fn run() {
             config::set_primary_model,
             config::add_available_model,
             config::remove_available_model,
+            // 飞书插件管理
+            config::check_feishu_plugin,
+            config::install_feishu_plugin,
             // 诊断测试
             diagnostics::run_doctor,
             diagnostics::test_ai_connection,

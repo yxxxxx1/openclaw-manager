@@ -19,8 +19,17 @@ import {
   QrCode,
   CheckCircle,
   XCircle,
+  Download,
+  Package,
+  AlertTriangle,
 } from 'lucide-react';
 import clsx from 'clsx';
+
+interface FeishuPluginStatus {
+  installed: boolean;
+  version: string | null;
+  plugin_name: string | null;
+}
 
 interface ChannelConfig {
   id: string;
@@ -192,6 +201,11 @@ export function Channels() {
   const [testResult, setTestResult] = useState<TestResult | null>(null);
   const [loginLoading, setLoginLoading] = useState(false);
   
+  // 飞书插件状态
+  const [feishuPluginStatus, setFeishuPluginStatus] = useState<FeishuPluginStatus | null>(null);
+  const [feishuPluginLoading, setFeishuPluginLoading] = useState(false);
+  const [feishuPluginInstalling, setFeishuPluginInstalling] = useState(false);
+  
   // 跟踪哪些密码字段显示明文
   const [visiblePasswords, setVisiblePasswords] = useState<Set<string>>(new Set());
 
@@ -205,6 +219,35 @@ export function Channels() {
       }
       return next;
     });
+  };
+  
+  // 检查飞书插件状态
+  const checkFeishuPlugin = async () => {
+    setFeishuPluginLoading(true);
+    try {
+      const status = await invoke<FeishuPluginStatus>('check_feishu_plugin');
+      setFeishuPluginStatus(status);
+    } catch (e) {
+      console.error('检查飞书插件失败:', e);
+      setFeishuPluginStatus({ installed: false, version: null, plugin_name: null });
+    } finally {
+      setFeishuPluginLoading(false);
+    }
+  };
+  
+  // 安装飞书插件
+  const handleInstallFeishuPlugin = async () => {
+    setFeishuPluginInstalling(true);
+    try {
+      const result = await invoke<string>('install_feishu_plugin');
+      alert(result);
+      // 刷新插件状态
+      await checkFeishuPlugin();
+    } catch (e) {
+      alert('安装失败: ' + e);
+    } finally {
+      setFeishuPluginInstalling(false);
+    }
   };
   
   // 快速测试
@@ -328,6 +371,11 @@ export function Channels() {
         }
       });
       setConfigForm(form);
+      
+      // 如果选择的是飞书渠道，检查插件状态
+      if (channel.channel_type === 'feishu') {
+        checkFeishuPlugin();
+      }
     } else {
       setConfigForm({});
     }
@@ -490,6 +538,66 @@ export function Channels() {
                     )}
                   </div>
                 </div>
+
+                {/* 飞书插件状态提示 */}
+                {currentChannel.channel_type === 'feishu' && (
+                  <div className="mb-4">
+                    {feishuPluginLoading ? (
+                      <div className="p-4 bg-dark-600 rounded-xl border border-dark-500 flex items-center gap-3">
+                        <Loader2 size={20} className="animate-spin text-gray-400" />
+                        <span className="text-gray-400">正在检查飞书插件状态...</span>
+                      </div>
+                    ) : feishuPluginStatus?.installed ? (
+                      <div className="p-4 bg-green-500/10 rounded-xl border border-green-500/30 flex items-center gap-3">
+                        <Package size={20} className="text-green-400" />
+                        <div className="flex-1">
+                          <p className="text-green-400 font-medium">飞书插件已安装</p>
+                          <p className="text-xs text-gray-400 mt-0.5">
+                            {feishuPluginStatus.plugin_name || '@m1heng-clawd/feishu'}
+                            {feishuPluginStatus.version && ` v${feishuPluginStatus.version}`}
+                          </p>
+                        </div>
+                        <CheckCircle size={16} className="text-green-400" />
+                      </div>
+                    ) : (
+                      <div className="p-4 bg-amber-500/10 rounded-xl border border-amber-500/30">
+                        <div className="flex items-start gap-3">
+                          <AlertTriangle size={20} className="text-amber-400 mt-0.5" />
+                          <div className="flex-1">
+                            <p className="text-amber-400 font-medium">需要安装飞书插件</p>
+                            <p className="text-xs text-gray-400 mt-1">
+                              飞书渠道需要先安装 @m1heng-clawd/feishu 插件才能使用。
+                            </p>
+                            <div className="mt-3 flex flex-wrap gap-2">
+                              <button
+                                onClick={handleInstallFeishuPlugin}
+                                disabled={feishuPluginInstalling}
+                                className="btn-primary flex items-center gap-2 text-sm py-2"
+                              >
+                                {feishuPluginInstalling ? (
+                                  <Loader2 size={14} className="animate-spin" />
+                                ) : (
+                                  <Download size={14} />
+                                )}
+                                {feishuPluginInstalling ? '安装中...' : '一键安装插件'}
+                              </button>
+                              <button
+                                onClick={checkFeishuPlugin}
+                                disabled={feishuPluginLoading}
+                                className="btn-secondary flex items-center gap-2 text-sm py-2"
+                              >
+                                刷新状态
+                              </button>
+                            </div>
+                            <p className="text-xs text-gray-500 mt-2">
+                              或手动执行: <code className="px-1.5 py-0.5 bg-dark-600 rounded text-gray-400">openclaw plugins install @m1heng-clawd/feishu</code>
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
 
                 <div className="space-y-4">
                   {currentInfo.fields.map((field) => (

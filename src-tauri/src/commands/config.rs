@@ -3,9 +3,10 @@ use crate::models::{
     ModelConfig, ModelCostConfig, OfficialProvider, OpenClawConfig,
     ProviderConfig, SuggestedModel,
 };
-use crate::utils::{file, platform};
-use log::{debug, error, info};
+use crate::utils::{file, platform, shell};
+use log::{debug, error, info, warn};
 use serde_json::{json, Value};
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use tauri::command;
 
@@ -992,6 +993,108 @@ pub async fn save_channel_config(channel: ChannelConfig) -> Result<String, Strin
         Err(e) => {
             error!("[保存渠道配置] ✗ 保存失败: {}", e);
             Err(e)
+        }
+    }
+}
+
+// ============ 飞书插件管理 ============
+
+/// 飞书插件状态
+#[derive(Debug, Serialize, Deserialize)]
+pub struct FeishuPluginStatus {
+    pub installed: bool,
+    pub version: Option<String>,
+    pub plugin_name: Option<String>,
+}
+
+/// 检查飞书插件是否已安装
+#[command]
+pub async fn check_feishu_plugin() -> Result<FeishuPluginStatus, String> {
+    info!("[飞书插件] 检查飞书插件安装状态...");
+    
+    // 执行 openclaw plugins list 命令
+    match shell::run_openclaw(&["plugins", "list"]) {
+        Ok(output) => {
+            debug!("[飞书插件] plugins list 输出: {}", output);
+            
+            // 查找包含 feishu 的行（不区分大小写）
+            let lines: Vec<&str> = output.lines().collect();
+            let feishu_line = lines.iter().find(|line| {
+                line.to_lowercase().contains("feishu")
+            });
+            
+            if let Some(line) = feishu_line {
+                info!("[飞书插件] ✓ 飞书插件已安装: {}", line);
+                
+                // 尝试解析版本号（通常格式为 "name@version" 或 "name version"）
+                let version = if line.contains('@') {
+                    line.split('@').last().map(|s| s.trim().to_string())
+                } else {
+                    // 尝试匹配版本号模式 (如 0.1.2)
+                    let parts: Vec<&str> = line.split_whitespace().collect();
+                    parts.iter()
+                        .find(|p| p.chars().next().map(|c| c.is_ascii_digit()).unwrap_or(false))
+                        .map(|s| s.to_string())
+                };
+                
+                Ok(FeishuPluginStatus {
+                    installed: true,
+                    version,
+                    plugin_name: Some(line.trim().to_string()),
+                })
+            } else {
+                info!("[飞书插件] ✗ 飞书插件未安装");
+                Ok(FeishuPluginStatus {
+                    installed: false,
+                    version: None,
+                    plugin_name: None,
+                })
+            }
+        }
+        Err(e) => {
+            warn!("[飞书插件] 检查插件列表失败: {}", e);
+            // 如果命令失败，假设插件未安装
+            Ok(FeishuPluginStatus {
+                installed: false,
+                version: None,
+                plugin_name: None,
+            })
+        }
+    }
+}
+
+/// 安装飞书插件
+#[command]
+pub async fn install_feishu_plugin() -> Result<String, String> {
+    info!("[飞书插件] 开始安装飞书插件...");
+    
+    // 先检查是否已安装
+    let status = check_feishu_plugin().await?;
+    if status.installed {
+        info!("[飞书插件] 飞书插件已安装，跳过");
+        return Ok(format!("飞书插件已安装: {}", status.plugin_name.unwrap_or_default()));
+    }
+    
+    // 安装飞书插件
+    // 注意：使用 @m1heng-clawd/feishu 包名
+    info!("[飞书插件] 执行 openclaw plugins install @m1heng-clawd/feishu ...");
+    match shell::run_openclaw(&["plugins", "install", "@m1heng-clawd/feishu"]) {
+        Ok(output) => {
+            info!("[飞书插件] 安装输出: {}", output);
+            
+            // 验证安装结果
+            let verify_status = check_feishu_plugin().await?;
+            if verify_status.installed {
+                info!("[飞书插件] ✓ 飞书插件安装成功");
+                Ok(format!("飞书插件安装成功: {}", verify_status.plugin_name.unwrap_or_default()))
+            } else {
+                warn!("[飞书插件] 安装命令执行成功但插件未找到");
+                Err("安装命令执行成功但插件未找到，请检查 openclaw 版本".to_string())
+            }
+        }
+        Err(e) => {
+            error!("[飞书插件] ✗ 安装失败: {}", e);
+            Err(format!("安装飞书插件失败: {}\n\n请手动执行: openclaw plugins install @m1heng-clawd/feishu", e))
         }
     }
 }
