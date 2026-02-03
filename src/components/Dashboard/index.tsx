@@ -4,11 +4,18 @@ import { invoke } from '@tauri-apps/api/core';
 import { StatusCard } from './StatusCard';
 import { QuickActions } from './QuickActions';
 import { SystemInfo } from './SystemInfo';
+import { Setup } from '../Setup';
 import { api, ServiceStatus, isTauri } from '../../lib/tauri';
 import { Terminal, RefreshCw, ChevronDown, ChevronUp } from 'lucide-react';
 import clsx from 'clsx';
+import { EnvironmentStatus } from '../../App';
 
-export function Dashboard() {
+interface DashboardProps {
+  envStatus: EnvironmentStatus | null;
+  onSetupComplete: () => void;
+}
+
+export function Dashboard({ envStatus, onSetupComplete }: DashboardProps) {
   const [status, setStatus] = useState<ServiceStatus | null>(null);
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
@@ -133,6 +140,9 @@ export function Dashboard() {
     show: { opacity: 1, y: 0 },
   };
 
+  // 检查环境是否就绪
+  const needsSetup = envStatus && !envStatus.ready;
+
   return (
     <div className="h-full overflow-y-auto scroll-container pr-2">
       <motion.div
@@ -141,6 +151,13 @@ export function Dashboard() {
         animate="show"
         className="space-y-6"
       >
+        {/* 环境安装向导（仅在需要时显示） */}
+        {needsSetup && (
+          <motion.div variants={itemVariants}>
+            <Setup onComplete={onSetupComplete} embedded />
+          </motion.div>
+        )}
+
         {/* 服务状态卡片 */}
         <motion.div variants={itemVariants}>
           <StatusCard status={status} loading={loading} />

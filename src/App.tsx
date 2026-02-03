@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { invoke } from '@tauri-apps/api/core';
 import { Sidebar } from './components/Layout/Sidebar';
@@ -9,13 +9,12 @@ import { Channels } from './components/Channels';
 import { Settings } from './components/Settings';
 import { Testing } from './components/Testing';
 import { Logs } from './components/Logs';
-import { Setup } from './components/Setup';
 import { appLogger } from './lib/logger';
 import { isTauri } from './lib/tauri';
 
 export type PageType = 'dashboard' | 'ai' | 'channels' | 'testing' | 'logs' | 'settings';
 
-interface EnvironmentStatus {
+export interface EnvironmentStatus {
   node_installed: boolean;
   node_version: string | null;
   node_version_ok: boolean;
@@ -35,36 +34,33 @@ interface ServiceStatus {
 function App() {
   const [currentPage, setCurrentPage] = useState<PageType>('dashboard');
   const [isReady, setIsReady] = useState<boolean | null>(null);
-  const [showSetup, setShowSetup] = useState(false);
+  const [envStatus, setEnvStatus] = useState<EnvironmentStatus | null>(null);
   const [serviceStatus, setServiceStatus] = useState<ServiceStatus | null>(null);
 
   // 检查环境
-  useEffect(() => {
-    appLogger.info('🦞 App 组件已挂载');
-    
-    // 检查是否在 Tauri 环境中
+  const checkEnvironment = useCallback(async () => {
     if (!isTauri()) {
       appLogger.warn('不在 Tauri 环境中，跳过环境检查');
       setIsReady(true);
-      setShowSetup(false);
       return;
     }
     
-    const checkEnv = async () => {
-      appLogger.info('开始检查系统环境...');
-      try {
-        const status = await invoke<EnvironmentStatus>('check_environment');
-        appLogger.info('环境检查完成', status);
-        setIsReady(status.ready);
-        setShowSetup(!status.ready);
-      } catch (e) {
-        appLogger.error('环境检查失败', e);
-        setIsReady(true);
-        setShowSetup(false);
-      }
-    };
-    checkEnv();
+    appLogger.info('开始检查系统环境...');
+    try {
+      const status = await invoke<EnvironmentStatus>('check_environment');
+      appLogger.info('环境检查完成', status);
+      setEnvStatus(status);
+      setIsReady(true); // 总是显示主界面
+    } catch (e) {
+      appLogger.error('环境检查失败', e);
+      setIsReady(true);
+    }
   }, []);
+
+  useEffect(() => {
+    appLogger.info('🦞 App 组件已挂载');
+    checkEnvironment();
+  }, [checkEnvironment]);
 
   // 定期获取服务状态
   useEffect(() => {
@@ -84,11 +80,10 @@ function App() {
     return () => clearInterval(interval);
   }, []);
 
-  const handleSetupComplete = () => {
+  const handleSetupComplete = useCallback(() => {
     appLogger.info('安装向导完成');
-    setIsReady(true);
-    setShowSetup(false);
-  };
+    checkEnvironment(); // 重新检查环境
+  }, [checkEnvironment]);
 
   // 页面切换处理
   const handleNavigate = (page: PageType) => {
@@ -104,7 +99,7 @@ function App() {
     };
 
     const pages: Record<PageType, JSX.Element> = {
-      dashboard: <Dashboard />,
+      dashboard: <Dashboard envStatus={envStatus} onSetupComplete={handleSetupComplete} />,
       ai: <AIConfig />,
       channels: <Channels />,
       testing: <Testing />,
@@ -144,12 +139,7 @@ function App() {
     );
   }
 
-  // 显示安装向导
-  if (showSetup) {
-    return <Setup onComplete={handleSetupComplete} />;
-  }
-
-  // 正常界面
+  // 主界面
   return (
     <div className="flex h-screen bg-dark-900 overflow-hidden">
       {/* 背景装饰 */}

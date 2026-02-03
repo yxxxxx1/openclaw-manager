@@ -85,16 +85,87 @@ pub async fn check_environment() -> Result<EnvironmentStatus, String> {
 }
 
 /// 获取 Node.js 版本
+/// 检测多个可能的安装路径，因为 GUI 应用不继承用户 shell 的 PATH
 fn get_node_version() -> Option<String> {
     if platform::is_windows() {
         shell::run_powershell_output("node --version")
             .ok()
             .map(|v| v.trim().to_string())
     } else {
-        shell::run_command_output("node", &["--version"])
-            .ok()
-            .map(|v| v.trim().to_string())
+        // 先尝试直接调用
+        if let Ok(v) = shell::run_command_output("node", &["--version"]) {
+            return Some(v.trim().to_string());
+        }
+        
+        // 检测常见的 Node.js 安装路径（macOS/Linux）
+        let possible_paths = get_unix_node_paths();
+        for path in possible_paths {
+            if std::path::Path::new(&path).exists() {
+                if let Ok(output) = shell::run_command_output(&path, &["--version"]) {
+                    info!("[环境检查] 在 {} 找到 Node.js: {}", path, output.trim());
+                    return Some(output.trim().to_string());
+                }
+            }
+        }
+        
+        // 尝试通过 shell 加载用户环境来检测
+        if let Ok(output) = shell::run_bash_output("source ~/.zshrc 2>/dev/null || source ~/.bashrc 2>/dev/null; node --version 2>/dev/null") {
+            if !output.is_empty() && output.starts_with('v') {
+                info!("[环境检查] 通过用户 shell 找到 Node.js: {}", output.trim());
+                return Some(output.trim().to_string());
+            }
+        }
+        
+        None
     }
+}
+
+/// 获取 Unix 系统上可能的 Node.js 路径
+fn get_unix_node_paths() -> Vec<String> {
+    let mut paths = Vec::new();
+    
+    // Homebrew (macOS)
+    paths.push("/opt/homebrew/bin/node".to_string()); // Apple Silicon
+    paths.push("/usr/local/bin/node".to_string());     // Intel Mac
+    
+    // 系统安装
+    paths.push("/usr/bin/node".to_string());
+    
+    // nvm (检查常见版本)
+    if let Some(home) = dirs::home_dir() {
+        let home_str = home.display().to_string();
+        
+        // nvm 默认版本
+        paths.push(format!("{}/.nvm/versions/node/v22.0.0/bin/node", home_str));
+        paths.push(format!("{}/.nvm/versions/node/v22.1.0/bin/node", home_str));
+        paths.push(format!("{}/.nvm/versions/node/v22.2.0/bin/node", home_str));
+        paths.push(format!("{}/.nvm/versions/node/v22.11.0/bin/node", home_str));
+        paths.push(format!("{}/.nvm/versions/node/v22.12.0/bin/node", home_str));
+        paths.push(format!("{}/.nvm/versions/node/v23.0.0/bin/node", home_str));
+        
+        // 尝试 nvm alias default（读取 nvm 的 default alias）
+        let nvm_default = format!("{}/.nvm/alias/default", home_str);
+        if let Ok(version) = std::fs::read_to_string(&nvm_default) {
+            let version = version.trim();
+            if !version.is_empty() {
+                paths.insert(0, format!("{}/.nvm/versions/node/v{}/bin/node", home_str, version));
+            }
+        }
+        
+        // fnm
+        paths.push(format!("{}/.fnm/aliases/default/bin/node", home_str));
+        
+        // volta
+        paths.push(format!("{}/.volta/bin/node", home_str));
+        
+        // asdf
+        paths.push(format!("{}/.asdf/shims/node", home_str));
+        
+        // mise (formerly rtx)
+        paths.push(format!("{}/.local/share/mise/shims/node", home_str));
+    }
+    
+    paths
 }
 
 /// 获取 OpenClaw 版本
