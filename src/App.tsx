@@ -6,14 +6,13 @@ import { Header } from './components/Layout/Header';
 import { Dashboard } from './components/Dashboard';
 import { AIConfig } from './components/AIConfig';
 import { Channels } from './components/Channels';
-import { ServiceManager } from './components/Service';
 import { Settings } from './components/Settings';
 import { Testing } from './components/Testing';
 import { Setup } from './components/Setup';
 import { appLogger } from './lib/logger';
 import { isTauri } from './lib/tauri';
 
-export type PageType = 'dashboard' | 'ai' | 'channels' | 'service' | 'testing' | 'settings';
+export type PageType = 'dashboard' | 'ai' | 'channels' | 'testing' | 'settings';
 
 interface EnvironmentStatus {
   node_installed: boolean;
@@ -107,7 +106,6 @@ function App() {
       dashboard: <Dashboard />,
       ai: <AIConfig />,
       channels: <Channels />,
-      service: <ServiceManager />,
       testing: <Testing />,
       settings: <Settings />,
     };

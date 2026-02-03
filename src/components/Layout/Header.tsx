@@ -1,29 +1,37 @@
+import { useState } from 'react';
 import { PageType } from '../../App';
-import { RefreshCw, ExternalLink } from 'lucide-react';
+import { RefreshCw, ExternalLink, Loader2 } from 'lucide-react';
+import { open } from '@tauri-apps/plugin-shell';
+import { invoke } from '@tauri-apps/api/core';
 
 interface HeaderProps {
   currentPage: PageType;
 }
 
 const pageTitles: Record<PageType, { title: string; description: string }> = {
-  dashboard: { title: '概览', description: '服务状态与快捷操作' },
+  dashboard: { title: '概览', description: '服务状态、日志与快捷操作' },
   ai: { title: 'AI 模型配置', description: '配置 AI 提供商和模型' },
   channels: { title: '消息渠道', description: '配置 Telegram、Discord、飞书等' },
-  service: { title: '服务管理', description: '启动、停止、查看日志' },
-  testing: { title: '测试诊断', description: '连接测试与问题诊断' },
+  testing: { title: '测试诊断', description: '系统诊断与问题排查' },
   settings: { title: '设置', description: '身份配置与高级选项' },
 };
 
 export function Header({ currentPage }: HeaderProps) {
   const { title, description } = pageTitles[currentPage];
+  const [opening, setOpening] = useState(false);
 
   const handleOpenDashboard = async () => {
-    // 调用 Tauri 打开 Dashboard URL
+    setOpening(true);
     try {
-      const { open } = await import('@tauri-apps/plugin-shell');
-      await open('http://localhost:18789');
+      // 获取带 token 的 Dashboard URL（如果没有 token 会自动生成）
+      const url = await invoke<string>('get_dashboard_url');
+      await open(url);
     } catch (e) {
       console.error('打开 Dashboard 失败:', e);
+      // 降级方案：使用 window.open（不带 token）
+      window.open('http://localhost:18789', '_blank');
+    } finally {
+      setOpening(false);
     }
   };
 
@@ -46,10 +54,11 @@ export function Header({ currentPage }: HeaderProps) {
         </button>
         <button
           onClick={handleOpenDashboard}
-          className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-dark-600 hover:bg-dark-500 text-sm text-gray-300 hover:text-white transition-colors"
+          disabled={opening}
+          className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-dark-600 hover:bg-dark-500 text-sm text-gray-300 hover:text-white transition-colors disabled:opacity-50"
           title="打开 Web Dashboard"
         >
-          <ExternalLink size={14} />
+          {opening ? <Loader2 size={14} className="animate-spin" /> : <ExternalLink size={14} />}
           <span>Dashboard</span>
         </button>
       </div>

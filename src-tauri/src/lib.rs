@@ -30,6 +30,17 @@ pub fn run() {
             config::get_ai_providers,
             config::get_channels_config,
             config::save_channel_config,
+            // Gateway Token
+            config::get_or_create_gateway_token,
+            config::get_dashboard_url,
+            // AI 配置管理
+            config::get_official_providers,
+            config::get_ai_config,
+            config::save_provider,
+            config::delete_provider,
+            config::set_primary_model,
+            config::add_available_model,
+            config::remove_available_model,
             // 诊断测试
             diagnostics::run_doctor,
             diagnostics::test_ai_connection,

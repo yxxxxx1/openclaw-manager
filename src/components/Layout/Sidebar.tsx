@@ -26,7 +26,6 @@ const menuItems: { id: PageType; label: string; icon: React.ElementType }[] = [
   { id: 'dashboard', label: '概览', icon: LayoutDashboard },
   { id: 'ai', label: 'AI 配置', icon: Bot },
   { id: 'channels', label: '消息渠道', icon: MessageSquare },
-  { id: 'service', label: '服务管理', icon: Zap },
   { id: 'testing', label: '测试诊断', icon: FlaskConical },
   { id: 'settings', label: '设置', icon: Settings },
 ];

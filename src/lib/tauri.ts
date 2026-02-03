@@ -43,7 +43,7 @@ export interface SystemInfo {
   config_dir: string;
 }
 
-// AI Provider 选项
+// AI Provider 选项（旧版兼容）
 export interface AIProviderOption {
   id: string;
   name: string;
@@ -58,6 +58,65 @@ export interface AIModelOption {
   name: string;
   description: string | null;
   recommended: boolean;
+}
+
+// 官方 Provider 预设
+export interface OfficialProvider {
+  id: string;
+  name: string;
+  icon: string;
+  default_base_url: string | null;
+  api_type: string;
+  suggested_models: SuggestedModel[];
+  requires_api_key: boolean;
+  docs_url: string | null;
+}
+
+export interface SuggestedModel {
+  id: string;
+  name: string;
+  description: string | null;
+  context_window: number | null;
+  max_tokens: number | null;
+  recommended: boolean;
+}
+
+// 已配置的 Provider
+export interface ConfiguredProvider {
+  name: string;
+  base_url: string;
+  api_key_masked: string | null;
+  has_api_key: boolean;
+  models: ConfiguredModel[];
+}
+
+export interface ConfiguredModel {
+  full_id: string;
+  id: string;
+  name: string;
+  api_type: string | null;
+  context_window: number | null;
+  max_tokens: number | null;
+  is_primary: boolean;
+}
+
+// AI 配置概览
+export interface AIConfigOverview {
+  primary_model: string | null;
+  configured_providers: ConfiguredProvider[];
+  available_models: string[];
+}
+
+// 模型配置
+export interface ModelConfig {
+  id: string;
+  name: string;
+  api: string | null;
+  input: string[];
+  context_window: number | null;
+  max_tokens: number | null;
+  reasoning: boolean | null;
+  cost: { input: number; output: number; cache_read: number; cache_write: number } | null;
 }
 
 // 渠道配置
@@ -107,8 +166,34 @@ export const api = {
   saveEnvValue: (key: string, value: string) =>
     invokeWithLog<string>('save_env_value', { key, value }),
 
-  // AI Provider
+  // AI Provider（旧版兼容）
   getAIProviders: () => invokeWithLog<AIProviderOption[]>('get_ai_providers'),
+
+  // AI 配置（新版）
+  getOfficialProviders: () => invokeWithLog<OfficialProvider[]>('get_official_providers'),
+  getAIConfig: () => invokeWithLog<AIConfigOverview>('get_ai_config'),
+  saveProvider: (
+    providerName: string,
+    baseUrl: string,
+    apiKey: string | null,
+    apiType: string,
+    models: ModelConfig[]
+  ) =>
+    invokeWithLog<string>('save_provider', {
+      providerName,
+      baseUrl,
+      apiKey,
+      apiType,
+      models,
+    }),
+  deleteProvider: (providerName: string) =>
+    invokeWithLog<string>('delete_provider', { providerName }),
+  setPrimaryModel: (modelId: string) =>
+    invokeWithLog<string>('set_primary_model', { modelId }),
+  addAvailableModel: (modelId: string) =>
+    invokeWithLog<string>('add_available_model', { modelId }),
+  removeAvailableModel: (modelId: string) =>
+    invokeWithLog<string>('remove_available_model', { modelId }),
 
   // 渠道
   getChannelsConfig: () => invokeWithLog<ChannelConfig[]>('get_channels_config'),

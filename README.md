@@ -19,7 +19,7 @@
   - Anthropic Claude
   - OpenAI GPT
   - DeepSeek
-  - Kimi (Moonshot)
+  - Moonshot
   - Google Gemini
   - OpenRouter
   - Groq
