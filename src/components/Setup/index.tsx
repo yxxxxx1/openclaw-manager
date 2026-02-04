@@ -406,7 +406,7 @@ export function Setup({ onComplete, embedded = false }: SetupProps) {
 
         {/* 版本信息 */}
         <p className="text-center text-dark-500 text-xs mt-6">
-          OpenClaw Manager v1.0.0
+          OpenClaw Manager v1.0.2
         </p>
       </motion.div>
     </div>
