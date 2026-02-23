@@ -495,6 +495,26 @@ pub fn spawn_openclaw_gateway() -> io::Result<()> {
     #[cfg(windows)]
     cmd.creation_flags(CREATE_NO_WINDOW);
     
+    // 将 stdout/stderr 重定向到日志文件，以便 get_logs 可以读取
+    let logs_dir = format!("{}/logs", platform::get_config_dir());
+    let _ = std::fs::create_dir_all(&logs_dir);
+    
+    let stdout_log_path = format!("{}/gateway.log", logs_dir);
+    let stderr_log_path = format!("{}/gateway.err.log", logs_dir);
+    
+    info!("[Shell] 日志输出到: {} / {}", stdout_log_path, stderr_log_path);
+    
+    if let Ok(stdout_file) = std::fs::OpenOptions::new()
+        .create(true).append(true).open(&stdout_log_path)
+    {
+        cmd.stdout(std::process::Stdio::from(stdout_file));
+    }
+    if let Ok(stderr_file) = std::fs::OpenOptions::new()
+        .create(true).append(true).open(&stderr_log_path)
+    {
+        cmd.stderr(std::process::Stdio::from(stderr_file));
+    }
+    
     info!("[Shell] 启动 gateway 进程...");
     let child = cmd.spawn();
     
