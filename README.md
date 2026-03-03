@@ -7,26 +7,15 @@
 
 ### 概览工作台
 
-![概览工作台](pic/dashboard.png)
+![概览工作台](pic/studio-dashboard.png)
 
 ### AI 配置
 
-![AI 配置](pic/ai.png)
+![AI 配置](pic/studio-ai.png)
 
-### 渠道配置示例
+### 最终联调
 
-<table>
-  <tr>
-    <td width="50%">
-      <img src="pic/telegram.png" alt="Telegram 配置">
-      <p align="center"><b>Telegram</b></p>
-    </td>
-    <td width="50%">
-      <img src="pic/feishu.png" alt="飞书配置">
-      <p align="center"><b>飞书</b></p>
-    </td>
-  </tr>
-</table>
+![最终联调](pic/studio-testing.png)
 
 ## 项目定位
 
