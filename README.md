@@ -9,10 +9,6 @@
 
 ![概览工作台](pic/studio-dashboard.png)
 
-### AI 配置
-
-![AI 配置](pic/studio-ai.png)
-
 ### 最终联调
 
 ![最终联调](pic/studio-testing.png)
