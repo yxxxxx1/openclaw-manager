@@ -3,6 +3,31 @@
 面向中文用户的 OpenClaw 图形化安装与管理工具。  
 基于 `Tauri 2 + React + TypeScript + Rust`，重点解决「一键安装、可视化配置、可诊断修复」。
 
+## 界面截图
+
+### 概览工作台
+
+![概览工作台](pic/dashboard.png)
+
+### AI 配置
+
+![AI 配置](pic/ai.png)
+
+### 渠道配置示例
+
+<table>
+  <tr>
+    <td width="50%">
+      <img src="pic/telegram.png" alt="Telegram 配置">
+      <p align="center"><b>Telegram</b></p>
+    </td>
+    <td width="50%">
+      <img src="pic/feishu.png" alt="飞书配置">
+      <p align="center"><b>飞书</b></p>
+    </td>
+  </tr>
+</table>
+
 ## 项目定位
 
 本项目不是通用模板，而是当前这套可交付产品：
