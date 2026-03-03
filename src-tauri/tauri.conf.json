@@ -1,6 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "OpenClaw Manager",
+  "productName": "OpenClaw Studio",
   "version": "0.0.7",
   "identifier": "com.openclaw.manager",
   "build": {
@@ -13,7 +13,7 @@
     "withGlobalTauri": true,
     "windows": [
       {
-        "title": "OpenClaw Manager",
+        "title": "OpenClaw Studio",
         "label": "main",
         "width": 1200,
         "height": 800,

@@ -4,6 +4,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { Sidebar } from './components/Layout/Sidebar';
 import { Header } from './components/Layout/Header';
 import { Dashboard } from './components/Dashboard';
+import { Setup } from './components/Setup';
 import { AIConfig } from './components/AIConfig';
 import { Channels } from './components/Channels';
 import { Settings } from './components/Settings';
@@ -11,7 +12,7 @@ import { Testing } from './components/Testing';
 import { Logs } from './components/Logs';
 import { appLogger } from './lib/logger';
 import { isTauri } from './lib/tauri';
-import { Download, X, Loader2, CheckCircle, AlertCircle } from 'lucide-react';
+import { Download, X, Loader2, CheckCircle, AlertCircle, Sparkles } from 'lucide-react';
 
 export type PageType = 'dashboard' | 'ai' | 'channels' | 'testing' | 'logs' | 'settings';
 
@@ -46,7 +47,22 @@ interface UpdateResult {
 }
 
 function App() {
-  const [currentPage, setCurrentPage] = useState<PageType>('dashboard');
+  const [currentPage, setCurrentPage] = useState<PageType>(() => {
+    if (typeof window === 'undefined') {
+      return 'dashboard';
+    }
+
+    const saved = window.localStorage.getItem('openclaw_last_page');
+    const validPages: PageType[] = ['dashboard', 'ai', 'channels', 'testing', 'logs', 'settings'];
+    return validPages.includes(saved as PageType) ? (saved as PageType) : 'dashboard';
+  });
+  const [configExpanded, setConfigExpanded] = useState<boolean>(() => {
+    if (typeof window === 'undefined') {
+      return false;
+    }
+
+    return window.localStorage.getItem('openclaw_config_expanded') === 'true';
+  });
   const [isReady, setIsReady] = useState<boolean | null>(null);
   const [envStatus, setEnvStatus] = useState<EnvironmentStatus | null>(null);
   const [serviceStatus, setServiceStatus] = useState<ServiceStatus | null>(null);
@@ -56,6 +72,8 @@ function App() {
   const [showUpdateBanner, setShowUpdateBanner] = useState(false);
   const [updating, setUpdating] = useState(false);
   const [updateResult, setUpdateResult] = useState<UpdateResult | null>(null);
+  const [showWorkspaceGuide, setShowWorkspaceGuide] = useState(false);
+  const [pendingGuideAfterSetup, setPendingGuideAfterSetup] = useState(false);
 
   // 检查环境
   const checkEnvironment = useCallback(async () => {
@@ -155,14 +173,42 @@ function App() {
 
   const handleSetupComplete = useCallback(() => {
     appLogger.info('安装向导完成');
+    setCurrentPage('dashboard');
+    window.localStorage.setItem('openclaw_last_page', 'dashboard');
+    setPendingGuideAfterSetup(true);
     checkEnvironment(); // 重新检查环境
   }, [checkEnvironment]);
+
+  useEffect(() => {
+    if (!pendingGuideAfterSetup || !envStatus?.ready) {
+      return;
+    }
+
+    const alreadySeen = window.localStorage.getItem('openclaw_workspace_guide_seen') === 'true';
+    if (!alreadySeen) {
+      setShowWorkspaceGuide(true);
+    }
+    setPendingGuideAfterSetup(false);
+  }, [pendingGuideAfterSetup, envStatus]);
 
   // 页面切换处理
   const handleNavigate = (page: PageType) => {
     appLogger.action('页面切换', { from: currentPage, to: page });
     setCurrentPage(page);
+    window.localStorage.setItem('openclaw_last_page', page);
+
+    if (page !== 'dashboard') {
+      setConfigExpanded(true);
+      window.localStorage.setItem('openclaw_config_expanded', 'true');
+    }
   };
+
+  useEffect(() => {
+    if (currentPage !== 'dashboard' && !configExpanded) {
+      setConfigExpanded(true);
+      window.localStorage.setItem('openclaw_config_expanded', 'true');
+    }
+  }, [currentPage, configExpanded]);
 
   const renderPage = () => {
     const pageVariants = {
@@ -172,10 +218,10 @@ function App() {
     };
 
     const pages: Record<PageType, JSX.Element> = {
-      dashboard: <Dashboard envStatus={envStatus} onSetupComplete={handleSetupComplete} />,
+      dashboard: <Dashboard onNavigate={handleNavigate} />,
       ai: <AIConfig />,
       channels: <Channels />,
-      testing: <Testing />,
+      testing: <Testing onNavigate={handleNavigate} />,
       logs: <Logs />,
       settings: <Settings onEnvironmentChange={checkEnvironment} />,
     };
@@ -212,9 +258,13 @@ function App() {
     );
   }
 
+  if (envStatus && !envStatus.ready) {
+    return <Setup onComplete={handleSetupComplete} />;
+  }
+
   // 主界面
   return (
-    <div className="flex h-screen bg-dark-900 overflow-hidden">
+    <div className="flex h-screen app-shell-bg overflow-hidden">
       {/* 背景装饰 */}
       <div className="fixed inset-0 bg-gradient-radial pointer-events-none" />
       
@@ -288,9 +338,94 @@ function App() {
           </motion.div>
         )}
       </AnimatePresence>
+
+      <AnimatePresence>
+        {showWorkspaceGuide && (
+          <motion.div
+            initial={{ opacity: 0, y: -20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -20 }}
+            className="fixed top-4 left-1/2 -translate-x-1/2 z-[60] w-[min(92vw,720px)]"
+          >
+            <div className="premium-card rounded-2xl border border-accent-cyan/40 p-4 md:p-5 shadow-xl">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <p className="text-xs text-accent-cyan mb-1 flex items-center gap-1">
+                    <Sparkles size={14} />
+                    新手引导
+                  </p>
+                  <h3 className="text-white font-semibold">欢迎进入 OpenClaw Studio 工作台</h3>
+                  <p className="text-sm text-dark-300 mt-1">建议先完成 AI 配置和消息渠道；最终联调是可选验收步骤。</p>
+                </div>
+                <button
+                  onClick={() => {
+                    setShowWorkspaceGuide(false);
+                    window.localStorage.setItem('openclaw_workspace_guide_seen', 'true');
+                  }}
+                  className="p-1.5 hover:bg-dark-700 rounded-lg text-dark-300 hover:text-white"
+                  aria-label="关闭引导"
+                >
+                  <X size={16} />
+                </button>
+              </div>
+
+              <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-2">
+                <button
+                  onClick={() => {
+                    setShowWorkspaceGuide(false);
+                    setCurrentPage('ai');
+                    setConfigExpanded(true);
+                    window.localStorage.setItem('openclaw_last_page', 'ai');
+                    window.localStorage.setItem('openclaw_config_expanded', 'true');
+                    window.localStorage.setItem('openclaw_workspace_guide_seen', 'true');
+                  }}
+                  className="btn-primary py-2.5 text-sm"
+                >
+                  第一步：AI 配置
+                </button>
+                <button
+                  onClick={() => {
+                    setShowWorkspaceGuide(false);
+                    setCurrentPage('channels');
+                    setConfigExpanded(true);
+                    window.localStorage.setItem('openclaw_last_page', 'channels');
+                    window.localStorage.setItem('openclaw_config_expanded', 'true');
+                    window.localStorage.setItem('openclaw_workspace_guide_seen', 'true');
+                  }}
+                  className="btn-secondary py-2.5 text-sm"
+                >
+                  第二步：消息渠道
+                </button>
+                <button
+                  onClick={() => {
+                    setShowWorkspaceGuide(false);
+                    setCurrentPage('testing');
+                    setConfigExpanded(true);
+                    window.localStorage.setItem('openclaw_last_page', 'testing');
+                    window.localStorage.setItem('openclaw_config_expanded', 'true');
+                    window.localStorage.setItem('openclaw_workspace_guide_seen', 'true');
+                  }}
+                  className="btn-secondary py-2.5 text-sm"
+                >
+                  第三步（可选）：最终联调
+                </button>
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
       
       {/* 侧边栏 */}
-      <Sidebar currentPage={currentPage} onNavigate={handleNavigate} serviceStatus={serviceStatus} />
+      <Sidebar
+        currentPage={currentPage}
+        onNavigate={handleNavigate}
+        serviceStatus={serviceStatus}
+        configExpanded={configExpanded}
+        onConfigExpandedChange={(expanded) => {
+          setConfigExpanded(expanded);
+          window.localStorage.setItem('openclaw_config_expanded', String(expanded));
+        }}
+      />
       
       {/* 主内容区 */}
       <div className="flex-1 flex flex-col overflow-hidden">
@@ -298,7 +433,7 @@ function App() {
         <Header currentPage={currentPage} />
         
         {/* 页面内容 */}
-        <main className="flex-1 overflow-hidden p-6">
+        <main className="flex-1 overflow-hidden p-3 pt-3">
           {renderPage()}
         </main>
       </div>

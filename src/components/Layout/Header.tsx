@@ -13,7 +13,7 @@ const pageTitles: Record<PageType, { title: string; description: string }> = {
   ai: { title: 'AI 模型配置', description: '配置 AI 提供商和模型' },
   channels: { title: '消息渠道', description: '配置 Telegram、Discord、飞书等' },
   testing: { title: '测试诊断', description: '系统诊断与问题排查' },
-  logs: { title: '应用日志', description: '查看 Manager 应用的控制台日志' },
+  logs: { title: '应用日志', description: '查看 Studio 应用的控制台日志' },
   settings: { title: '设置', description: '身份配置与高级选项' },
 };
 
@@ -37,18 +37,19 @@ export function Header({ currentPage }: HeaderProps) {
   };
 
   return (
-    <header className="h-14 bg-dark-800/50 border-b border-dark-600 flex items-center justify-between px-6 titlebar-drag backdrop-blur-sm">
+    <header className="h-16 premium-card border-b soft-divider flex items-center justify-between px-6 titlebar-drag rounded-2xl m-3 mb-0 backdrop-blur-sm">
       {/* 左侧：页面标题 */}
       <div className="titlebar-no-drag">
-        <h2 className="text-lg font-semibold text-white">{title}</h2>
-        <p className="text-xs text-gray-500">{description}</p>
+        <p className="section-title mb-1">控制中心</p>
+        <h2 className="text-lg font-semibold text-white leading-tight">{title}</h2>
+        <p className="text-xs text-gray-400">{description}</p>
       </div>
 
       {/* 右侧：操作按钮 */}
       <div className="flex items-center gap-2 titlebar-no-drag">
         <button
           onClick={() => window.location.reload()}
-          className="icon-button text-gray-400 hover:text-white"
+          className="icon-button text-gray-300 hover:text-white border border-transparent hover:border-dark-400"
           title="刷新"
         >
           <RefreshCw size={16} />
@@ -56,7 +57,7 @@ export function Header({ currentPage }: HeaderProps) {
         <button
           onClick={handleOpenDashboard}
           disabled={opening}
-          className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-dark-600 hover:bg-dark-500 text-sm text-gray-300 hover:text-white transition-colors disabled:opacity-50"
+          className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-gradient-to-r from-cyan-500/20 to-claw-500/20 border border-cyan-500/30 text-sm text-cyan-100 hover:text-white transition-colors disabled:opacity-50"
           title="打开 Web Dashboard"
         >
           {opening ? <Loader2 size={14} className="animate-spin" /> : <ExternalLink size={14} />}

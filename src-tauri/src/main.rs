@@ -66,9 +66,15 @@ fn main() {
             // 安装器
             installer::check_environment,
             installer::install_nodejs,
+            installer::install_nodejs_admin,
             installer::install_openclaw,
             installer::init_openclaw_config,
             installer::open_install_terminal,
+            installer::precheck_npm_registry,
+            installer::analyze_install_failure,
+            installer::use_temporary_npm_registry,
+            installer::restore_npm_registry,
+            installer::export_install_diagnostic_report,
             installer::uninstall_openclaw,
             // 版本更新
             installer::check_openclaw_update,

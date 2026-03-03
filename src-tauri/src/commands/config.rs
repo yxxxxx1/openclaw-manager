@@ -296,7 +296,7 @@ pub async fn get_official_providers() -> Result<Vec<OfficialProvider>, String> {
             id: "deepseek".to_string(),
             name: "DeepSeek".to_string(),
             icon: "🔵".to_string(),
-            default_base_url: Some("https://api.deepseek.com".to_string()),
+            default_base_url: Some("https://api.deepseek.com/v1".to_string()),
             api_type: "openai-completions".to_string(),
             requires_api_key: true,
             docs_url: None,
@@ -621,9 +621,18 @@ pub async fn save_provider(
         })
         .collect();
 
+    // 规范化 Base URL（降低常见配置错误）
+    let mut normalized_base_url = base_url.trim().to_string();
+    if provider_name == "deepseek"
+        && normalized_base_url.eq_ignore_ascii_case("https://api.deepseek.com")
+    {
+        normalized_base_url = "https://api.deepseek.com/v1".to_string();
+        info!("[保存 Provider] DeepSeek Base URL 已自动补全为 /v1");
+    }
+
     // 构建 Provider 配置
     let mut provider_config = json!({
-        "baseUrl": base_url,
+        "baseUrl": normalized_base_url,
         "models": models_json,
     });
 

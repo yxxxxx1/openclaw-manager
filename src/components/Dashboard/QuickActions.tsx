@@ -13,6 +13,7 @@ interface QuickActionsProps {
   onStart: () => void;
   onStop: () => void;
   onRestart: () => void;
+  onOpenTesting: () => void;
 }
 
 export function QuickActions({
@@ -21,11 +22,13 @@ export function QuickActions({
   onStart,
   onStop,
   onRestart,
+  onOpenTesting,
 }: QuickActionsProps) {
   const isRunning = status?.running || false;
 
   return (
-    <div className="bg-dark-700 rounded-2xl p-6 border border-dark-500">
+    <div className="premium-card rounded-2xl p-6">
+      <p className="section-title mb-1">控制动作</p>
       <h3 className="text-lg font-semibold text-white mb-4">快捷操作</h3>
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -34,8 +37,8 @@ export function QuickActions({
           onClick={onStart}
           disabled={loading || isRunning}
           className={clsx(
-            'flex flex-col items-center gap-3 p-4 rounded-xl transition-all',
-            'border border-dark-500',
+             'flex flex-col items-center gap-3 p-4 rounded-xl transition-all',
+             'border soft-divider',
             isRunning
               ? 'bg-dark-600 opacity-50 cursor-not-allowed'
               : 'bg-dark-600 hover:bg-green-500/20 hover:border-green-500/50'
@@ -67,8 +70,8 @@ export function QuickActions({
           onClick={onStop}
           disabled={loading || !isRunning}
           className={clsx(
-            'flex flex-col items-center gap-3 p-4 rounded-xl transition-all',
-            'border border-dark-500',
+             'flex flex-col items-center gap-3 p-4 rounded-xl transition-all',
+             'border soft-divider',
             !isRunning
               ? 'bg-dark-600 opacity-50 cursor-not-allowed'
               : 'bg-dark-600 hover:bg-red-500/20 hover:border-red-500/50'
@@ -101,7 +104,7 @@ export function QuickActions({
           disabled={loading}
           className={clsx(
             'flex flex-col items-center gap-3 p-4 rounded-xl transition-all',
-            'border border-dark-500',
+            'border soft-divider',
             'bg-dark-600 hover:bg-amber-500/20 hover:border-amber-500/50'
           )}
         >
@@ -116,15 +119,16 @@ export function QuickActions({
 
         {/* 诊断按钮 */}
         <button
+          onClick={onOpenTesting}
           disabled={loading}
           className={clsx(
             'flex flex-col items-center gap-3 p-4 rounded-xl transition-all',
-            'border border-dark-500',
-            'bg-dark-600 hover:bg-purple-500/20 hover:border-purple-500/50'
+            'border soft-divider',
+            'bg-dark-600 hover:bg-cyan-500/20 hover:border-cyan-500/50'
           )}
         >
-          <div className="w-12 h-12 rounded-full flex items-center justify-center bg-purple-500/20">
-            <Stethoscope size={20} className="text-purple-400" />
+          <div className="w-12 h-12 rounded-full flex items-center justify-center bg-cyan-500/20">
+            <Stethoscope size={20} className="text-cyan-300" />
           </div>
           <span className="text-sm font-medium text-gray-300">诊断</span>
         </button>

@@ -135,6 +135,23 @@ function ProviderDialog({ officialProviders, onClose, onSave, editingProvider }:
   const [formError, setFormError] = useState<string | null>(null);
   const [showCustomUrlWarning, setShowCustomUrlWarning] = useState(false);
 
+  const cnPreferredProviderIds = new Set(['deepseek', 'qwen', 'glm', 'moonshot', 'minimax']);
+  const sortedOfficialProviders = [...officialProviders].sort((a, b) => {
+    const aPreferred = cnPreferredProviderIds.has(a.id);
+    const bPreferred = cnPreferredProviderIds.has(b.id);
+    if (aPreferred && !bPreferred) return -1;
+    if (!aPreferred && bPreferred) return 1;
+    return a.name.localeCompare(b.name, 'zh-CN');
+  });
+
+  const providerKeyGuide: Record<string, string> = {
+    deepseek: '在 DeepSeek 开放平台创建 API Key，通常以 sk- 开头。',
+    qwen: '在阿里云百炼控制台创建 API-KEY，使用兼容模式地址。',
+    glm: '在智谱开放平台创建 API Key，注意区分项目级和个人级 Key。',
+    moonshot: '在 Moonshot（Kimi）开放平台创建 API Key。',
+    minimax: '在 MiniMax 开放平台创建 Key，默认使用 Anthropic 兼容接口。',
+  };
+
   // 检查是否是官方 Provider 名字但使用了自定义地址
   const isCustomUrlWithOfficialName = (() => {
     const official = officialProviders.find(p => p.id === providerName);
@@ -295,7 +312,7 @@ function ProviderDialog({ officialProviders, onClose, onSave, editingProvider }:
                 <div className="space-y-3">
                   <h3 className="text-sm font-medium text-gray-400">官方 Provider</h3>
                   <div className="grid grid-cols-2 gap-3">
-                    {officialProviders.map(provider => (
+                    {sortedOfficialProviders.map(provider => (
                 <button
                   key={provider.id}
                         onClick={() => handleSelectOfficial(provider)}
@@ -303,7 +320,12 @@ function ProviderDialog({ officialProviders, onClose, onSave, editingProvider }:
                 >
                   <span className="text-2xl">{provider.icon}</span>
                         <div className="flex-1 min-w-0">
-                          <p className="font-medium text-white truncate">{provider.name}</p>
+                          <p className="font-medium text-white truncate">
+                            {provider.name}
+                            {cnPreferredProviderIds.has(provider.id) && (
+                              <span className="ml-2 text-[10px] text-cyan-300 bg-cyan-500/15 border border-cyan-500/30 px-1.5 py-0.5 rounded">中国区推荐</span>
+                            )}
+                          </p>
                           <p className="text-xs text-gray-500 truncate">
                             {provider.suggested_models.length} 个模型
                           </p>
@@ -383,7 +405,7 @@ function ProviderDialog({ officialProviders, onClose, onSave, editingProvider }:
                   />
                 </div>
 
-              {/* API Key */}
+                {/* API Key */}
                 <div>
                   <label className="block text-sm text-gray-400 mb-2">
                     API Key
@@ -423,6 +445,9 @@ function ProviderDialog({ officialProviders, onClose, onSave, editingProvider }:
                     <p className="text-xs text-gray-500 mt-1">
                       💡 如果不需要更改 API Key，请保持为空
                     </p>
+                  )}
+                  {selectedOfficial && providerKeyGuide[selectedOfficial.id] && (
+                    <p className="text-xs text-cyan-300 mt-2">{providerKeyGuide[selectedOfficial.id]}</p>
                   )}
                 </div>
 
@@ -868,6 +893,7 @@ export function AIConfig() {
       const result = await invoke<AITestResult>('test_ai_connection');
       setTestResult(result);
       if (result.success) {
+        window.localStorage.setItem('openclaw_onboarding_ai_done', 'true');
         aiLogger.info(`✅ AI 连接测试成功，延迟: ${result.latency_ms}ms`);
       } else {
         aiLogger.warn(`❌ AI 连接测试失败: ${result.error}`);
@@ -911,10 +937,17 @@ export function AIConfig() {
     loadData();
   }, [loadData]);
 
+  useEffect(() => {
+    if (aiConfig?.configured_providers.length && aiConfig.primary_model) {
+      window.localStorage.setItem('openclaw_onboarding_ai_done', 'true');
+    }
+  }, [aiConfig]);
+
   const handleSetPrimary = async (modelId: string) => {
     try {
       await invoke('set_primary_model', { modelId });
       aiLogger.info(`主模型已设置为: ${modelId}`);
+      window.localStorage.setItem('openclaw_onboarding_ai_done', 'true');
       loadData();
     } catch (e) {
       aiLogger.error('设置主模型失败', e);
@@ -946,6 +979,15 @@ export function AIConfig() {
             </button>
           </div>
         )}
+
+        <div className="bg-cyan-500/10 border border-cyan-500/30 rounded-xl p-4">
+          <p className="text-sm text-cyan-200 font-medium mb-2">中国区配置建议</p>
+          <ul className="text-xs text-cyan-100/90 space-y-1">
+            <li>• 推荐优先使用 DeepSeek、Qwen、GLM、Kimi、MiniMax，连通性通常更稳定。</li>
+            <li>• API Key 从各家控制台创建并复制，建议单独创建“OpenClaw 专用 Key”。</li>
+            <li>• 如果连接失败，先确认 Base URL 与模型 ID 是否匹配，再测试连接。</li>
+          </ul>
+        </div>
 
         {/* 概览卡片 */}
         <div className="bg-gradient-to-br from-dark-700 to-dark-800 rounded-2xl p-6 border border-dark-500">

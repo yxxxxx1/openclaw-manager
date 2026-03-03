@@ -4,25 +4,36 @@ import { invoke } from '@tauri-apps/api/core';
 import { StatusCard } from './StatusCard';
 import { QuickActions } from './QuickActions';
 import { SystemInfo } from './SystemInfo';
-import { Setup } from '../Setup';
 import { api, ServiceStatus, isTauri } from '../../lib/tauri';
-import { Terminal, RefreshCw, ChevronDown, ChevronUp } from 'lucide-react';
+import { Terminal, RefreshCw, ChevronDown, ChevronUp, CheckCircle2, CircleDashed, ArrowRight } from 'lucide-react';
 import clsx from 'clsx';
-import { EnvironmentStatus } from '../../App';
+import type { PageType } from '../../App';
 
 interface DashboardProps {
-  envStatus: EnvironmentStatus | null;
-  onSetupComplete: () => void;
+  onNavigate: (page: PageType) => void;
 }
 
-export function Dashboard({ envStatus, onSetupComplete }: DashboardProps) {
+export function Dashboard({ onNavigate }: DashboardProps) {
   const [status, setStatus] = useState<ServiceStatus | null>(null);
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
   const [logs, setLogs] = useState<string[]>([]);
   const [logsExpanded, setLogsExpanded] = useState(true);
   const [autoRefreshLogs, setAutoRefreshLogs] = useState(true);
+  const [guideState, setGuideState] = useState({
+    aiDone: false,
+    channelDone: false,
+    testingDone: false,
+  });
   const logsContainerRef = useRef<HTMLDivElement>(null);
+
+  const refreshGuideState = () => {
+    setGuideState({
+      aiDone: window.localStorage.getItem('openclaw_onboarding_ai_done') === 'true',
+      channelDone: window.localStorage.getItem('openclaw_onboarding_channel_done') === 'true',
+      testingDone: window.localStorage.getItem('openclaw_onboarding_testing_done') === 'true',
+    });
+  };
 
   const fetchStatus = async () => {
     if (!isTauri()) {
@@ -52,6 +63,7 @@ export function Dashboard({ envStatus, onSetupComplete }: DashboardProps) {
   useEffect(() => {
     fetchStatus();
     fetchLogs();
+    refreshGuideState();
     if (!isTauri()) return;
     
     const statusInterval = setInterval(fetchStatus, 3000);
@@ -62,6 +74,12 @@ export function Dashboard({ envStatus, onSetupComplete }: DashboardProps) {
       if (logsInterval) clearInterval(logsInterval);
     };
   }, [autoRefreshLogs]);
+
+  useEffect(() => {
+    const onFocus = () => refreshGuideState();
+    window.addEventListener('focus', onFocus);
+    return () => window.removeEventListener('focus', onFocus);
+  }, []);
 
   // 自动滚动到日志底部（仅在日志容器内部滚动，不影响页面）
   useEffect(() => {
@@ -140,8 +158,8 @@ export function Dashboard({ envStatus, onSetupComplete }: DashboardProps) {
     show: { opacity: 1, y: 0 },
   };
 
-  // 检查环境是否就绪
-  const needsSetup = envStatus && !envStatus.ready;
+  const requiredDoneCount = [guideState.aiDone, guideState.channelDone].filter(Boolean).length;
+  const requiredAllDone = guideState.aiDone && guideState.channelDone;
 
   return (
     <div className="h-full overflow-y-auto scroll-container pr-2">
@@ -151,13 +169,6 @@ export function Dashboard({ envStatus, onSetupComplete }: DashboardProps) {
         animate="show"
         className="space-y-6"
       >
-        {/* 环境安装向导（仅在需要时显示） */}
-        {needsSetup && (
-          <motion.div variants={itemVariants}>
-            <Setup onComplete={onSetupComplete} embedded />
-          </motion.div>
-        )}
-
         {/* 服务状态卡片 */}
         <motion.div variants={itemVariants}>
           <StatusCard status={status} loading={loading} />
@@ -165,21 +176,92 @@ export function Dashboard({ envStatus, onSetupComplete }: DashboardProps) {
 
         {/* 快捷操作 */}
         <motion.div variants={itemVariants}>
+          <div className="premium-card rounded-2xl p-6 border border-accent-cyan/20">
+            <div className="flex items-center justify-between gap-4 mb-4">
+              <div>
+                <p className="section-title mb-1">首次配置</p>
+                <h3 className="text-lg font-semibold text-white">推荐按顺序完成</h3>
+              </div>
+              <span className="text-xs text-dark-300">
+                {requiredDoneCount}/2 必选已完成
+              </span>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+              {[
+                { key: 'ai', title: 'AI 配置', done: guideState.aiDone, page: 'ai' as PageType },
+                { key: 'channel', title: '消息渠道', done: guideState.channelDone, page: 'channels' as PageType },
+                { key: 'testing', title: '最终联调（可选）', done: guideState.testingDone, page: 'testing' as PageType, optional: true },
+              ].map((item) => (
+                <button
+                  key={item.key}
+                  onClick={() => onNavigate(item.page)}
+                  className="text-left rounded-xl border border-dark-500 bg-dark-700/60 hover:border-accent-cyan/40 transition-colors p-4"
+                >
+                  <div className="flex items-center justify-between mb-2">
+                    <p className="text-sm font-medium text-white">{item.title}</p>
+                    {item.done ? (
+                      <CheckCircle2 size={16} className="text-green-400" />
+                    ) : (
+                      <CircleDashed size={16} className="text-dark-300" />
+                    )}
+                  </div>
+                  <p className={clsx('text-xs', item.done ? 'text-green-300' : 'text-dark-300')}>
+                    {item.done
+                      ? '已完成，可随时调整'
+                      : item.optional
+                        ? '可选步骤：用于一次性验收，不做也可先使用'
+                        : '尚未完成，点击继续'}
+                  </p>
+                </button>
+              ))}
+            </div>
+
+            <div className="mt-4 flex justify-end gap-2">
+              {requiredAllDone && !guideState.testingDone && (
+                <button
+                  onClick={() => onNavigate('testing')}
+                  className="btn-secondary py-2 px-3 text-sm"
+                >
+                  可选：做一次最终联调
+                </button>
+              )}
+              <button
+                onClick={() => {
+                  if (!guideState.aiDone) return onNavigate('ai');
+                  if (!guideState.channelDone) return onNavigate('channels');
+                  return onNavigate('dashboard');
+                }}
+                className="btn-primary py-2 px-3 text-sm flex items-center gap-2"
+              >
+                {!guideState.aiDone
+                  ? '下一步：AI 配置'
+                  : !guideState.channelDone
+                    ? '下一步：消息渠道'
+                    : '已完成初始化'}
+                <ArrowRight size={14} />
+              </button>
+            </div>
+          </div>
+        </motion.div>
+
+        <motion.div variants={itemVariants}>
           <QuickActions
             status={status}
             loading={actionLoading}
             onStart={handleStart}
             onStop={handleStop}
             onRestart={handleRestart}
+            onOpenTesting={() => onNavigate('testing')}
           />
         </motion.div>
 
         {/* 实时日志 */}
         <motion.div variants={itemVariants}>
-          <div className="bg-dark-700 rounded-2xl border border-dark-500 overflow-hidden">
+          <div className="premium-card rounded-2xl overflow-hidden">
             {/* 日志标题栏 */}
             <div 
-              className="flex items-center justify-between px-4 py-3 bg-dark-600/50 cursor-pointer"
+              className="flex items-center justify-between px-4 py-3 bg-dark-700/40 border-b soft-divider cursor-pointer"
               onClick={() => setLogsExpanded(!logsExpanded)}
             >
               <div className="flex items-center gap-2">
@@ -226,7 +308,7 @@ export function Dashboard({ envStatus, onSetupComplete }: DashboardProps) {
 
             {/* 日志内容 */}
             {logsExpanded && (
-              <div ref={logsContainerRef} className="h-64 overflow-y-auto p-4 font-mono text-xs leading-relaxed bg-dark-800">
+              <div ref={logsContainerRef} className="h-64 overflow-y-auto p-4 font-mono text-xs leading-relaxed bg-dark-800/80">
                 {logs.length === 0 ? (
                   <div className="h-full flex items-center justify-center text-gray-500">
                     <p>暂无日志，请先启动服务</p>

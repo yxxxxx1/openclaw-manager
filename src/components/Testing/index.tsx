@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 import clsx from 'clsx';
 import { testingLogger } from '../../lib/logger';
+import type { PageType } from '../../App';
 
 interface DiagnosticResult {
   name: string;
@@ -18,21 +19,32 @@ interface DiagnosticResult {
   suggestion: string | null;
 }
 
-export function Testing() {
+interface TestingProps {
+  onNavigate?: (page: PageType) => void;
+}
+
+export function Testing({ onNavigate }: TestingProps) {
   const [diagnosticResults, setDiagnosticResults] = useState<DiagnosticResult[]>([]);
   const [loading, setLoading] = useState(false);
+  const aiDone = window.localStorage.getItem('openclaw_onboarding_ai_done') === 'true';
+  const channelDone = window.localStorage.getItem('openclaw_onboarding_channel_done') === 'true';
 
   const runDiagnostics = async () => {
-    testingLogger.action('运行系统诊断');
-    testingLogger.info('开始系统诊断...');
+    testingLogger.action('运行最终联调');
+    testingLogger.info('开始最终联调检查...');
     setLoading(true);
     setDiagnosticResults([]);
     try {
       const results = await invoke<DiagnosticResult[]>('run_doctor');
-      testingLogger.info(`诊断完成，共 ${results.length} 项检查`);
+      testingLogger.info(`联调完成，共 ${results.length} 项检查`);
       const passed = results.filter(r => r.passed).length;
       testingLogger.state('诊断结果', { total: results.length, passed, failed: results.length - passed });
       setDiagnosticResults(results);
+      if (results.length > 0 && passed === results.length) {
+        window.localStorage.setItem('openclaw_onboarding_testing_done', 'true');
+      } else {
+        window.localStorage.removeItem('openclaw_onboarding_testing_done');
+      }
     } catch (e) {
       testingLogger.error('诊断执行失败', e);
       setDiagnosticResults([{
@@ -41,6 +53,7 @@ export function Testing() {
         message: String(e),
         suggestion: '请检查 OpenClaw 是否正确安装',
       }]);
+      window.localStorage.removeItem('openclaw_onboarding_testing_done');
     } finally {
       setLoading(false);
     }
@@ -61,9 +74,9 @@ export function Testing() {
                 <Stethoscope size={20} className="text-purple-400" />
               </div>
               <div>
-                <h3 className="text-lg font-semibold text-white">系统诊断</h3>
+                <h3 className="text-lg font-semibold text-white">最终联调（可选）</h3>
                 <p className="text-xs text-gray-500">
-                  检查 OpenClaw 安装和配置状态
+                  不重复做单项测试，只做一次整体可用性验收
                 </p>
               </div>
             </div>
@@ -77,8 +90,16 @@ export function Testing() {
               ) : (
                 <Play size={16} />
               )}
-              运行诊断
+              开始最终联调
             </button>
+          </div>
+
+          <div className="mb-4 p-3 rounded-lg border border-cyan-500/30 bg-cyan-500/10 text-xs text-cyan-100">
+            <p>你在 AI 配置页和消息渠道页的单项测试已是主要校验手段。</p>
+            <p className="mt-1">本页用于最后一步的一次性联调验收（可选，不阻塞使用）。</p>
+            <p className="mt-1 text-cyan-200">
+              当前步骤状态：AI {aiDone ? '已通过' : '未通过'} / 渠道 {channelDone ? '已通过' : '未通过'}
+            </p>
           </div>
 
           {/* 诊断结果统计 */}
@@ -92,6 +113,12 @@ export function Testing() {
                 <div className="flex items-center gap-2">
                   <XCircle size={16} className="text-red-400" />
                   <span className="text-sm text-red-400">{failedCount} 项失败</span>
+                </div>
+              )}
+              {failedCount > 0 && onNavigate && (
+                <div className="ml-auto flex items-center gap-2">
+                  <button onClick={() => onNavigate('ai')} className="btn-secondary py-1.5 px-3 text-xs">去 AI 配置</button>
+                  <button onClick={() => onNavigate('channels')} className="btn-secondary py-1.5 px-3 text-xs">去消息渠道</button>
                 </div>
               )}
             </div>
@@ -142,18 +169,18 @@ export function Testing() {
           {diagnosticResults.length === 0 && !loading && (
             <div className="text-center py-8 text-gray-500">
               <Stethoscope size={48} className="mx-auto mb-3 opacity-30" />
-              <p>点击"运行诊断"按钮开始检查系统状态</p>
+              <p>点击“开始最终联调”进行一次整体验收</p>
             </div>
           )}
         </div>
 
         {/* 说明 */}
         <div className="bg-dark-700/50 rounded-xl p-4 border border-dark-500">
-          <h4 className="text-sm font-medium text-gray-400 mb-2">诊断说明</h4>
+          <h4 className="text-sm font-medium text-gray-400 mb-2">联调说明</h4>
           <ul className="text-sm text-gray-500 space-y-1">
-            <li>• 系统诊断会检查 Node.js、OpenClaw 安装、配置文件等状态</li>
-            <li>• AI 连接测试请前往 <span className="text-claw-400">AI 配置</span> 页面进行</li>
-            <li>• 渠道测试请前往 <span className="text-claw-400">消息渠道</span> 页面进行</li>
+            <li>• 本页只做整体联调，不替代 AI/渠道页面中的单项测试</li>
+            <li>• AI 连接测试请在 <span className="text-claw-400">AI 配置</span> 页面完成</li>
+            <li>• 渠道连通测试请在 <span className="text-claw-400">消息渠道</span> 页面完成</li>
           </ul>
         </div>
       </div>

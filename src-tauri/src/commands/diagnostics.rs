@@ -2,6 +2,32 @@ use crate::models::{AITestResult, ChannelTestResult, DiagnosticResult, SystemInf
 use crate::utils::{platform, shell};
 use tauri::command;
 use log::{info, warn, error, debug};
+use serde_json::Value;
+
+fn get_current_ai_context() -> Option<(String, String, String)> {
+    let config_path = platform::get_config_file_path();
+    let content = std::fs::read_to_string(config_path).ok()?;
+    let json: Value = serde_json::from_str(&content).ok()?;
+
+    let primary_model = json
+        .pointer("/agents/defaults/model/primary")
+        .and_then(|v| v.as_str())
+        .unwrap_or_default()
+        .to_string();
+
+    if primary_model.is_empty() || !primary_model.contains('/') {
+        return None;
+    }
+
+    let provider = primary_model.split('/').next().unwrap_or_default().to_string();
+    let base_url = json
+        .pointer(&format!("/models/providers/{}/baseUrl", provider))
+        .and_then(|v| v.as_str())
+        .unwrap_or_default()
+        .to_string();
+
+    Some((provider, primary_model, base_url))
+}
 
 /// 去除 ANSI 转义序列（颜色代码等）
 fn strip_ansi_codes(input: &str) -> String {
@@ -176,12 +202,64 @@ pub async fn run_doctor() -> Result<Vec<DiagnosticResult>, String> {
 pub async fn test_ai_connection() -> Result<AITestResult, String> {
     info!("[AI测试] 开始测试 AI 连接...");
     
-    // 获取当前配置的 provider
+    // 获取当前配置的 provider / model，上报给前端以避免“看起来像走错通道”
+    let (selected_provider, selected_model, _selected_base_url) =
+        get_current_ai_context().unwrap_or_else(|| {
+            (
+                "current".to_string(),
+                "default".to_string(),
+                String::new(),
+            )
+        });
+
     let start = std::time::Instant::now();
     
-    // 使用 openclaw 命令测试连接
-    info!("[AI测试] 执行: openclaw agent --local --to +1234567890 --message 回复 OK");
-    let result = shell::run_openclaw(&["agent", "--local", "--to", "+1234567890", "--message", "回复 OK"]);
+    // 优先显式指定模型，避免 CLI failover 到其它 provider（如 openai-codex）
+    let result = if selected_model != "default" {
+        info!(
+            "[AI测试] 执行: openclaw agent --local --model {} --to +1234567890 --message 回复 OK",
+            selected_model
+        );
+        let with_model = shell::run_openclaw(&[
+            "agent",
+            "--local",
+            "--model",
+            &selected_model,
+            "--to",
+            "+1234567890",
+            "--message",
+            "回复 OK",
+        ]);
+
+        // 兼容低版本 CLI（可能不支持 --model）
+        if let Err(err_text) = &with_model {
+            if err_text.contains("unknown option") || err_text.contains("Unknown argument") {
+                info!("[AI测试] 当前 openclaw 版本不支持 --model，回退默认测试命令");
+                shell::run_openclaw(&[
+                    "agent",
+                    "--local",
+                    "--to",
+                    "+1234567890",
+                    "--message",
+                    "回复 OK",
+                ])
+            } else {
+                with_model
+            }
+        } else {
+            with_model
+        }
+    } else {
+        info!("[AI测试] 未识别到主模型，执行默认测试命令");
+        shell::run_openclaw(&[
+            "agent",
+            "--local",
+            "--to",
+            "+1234567890",
+            "--message",
+            "回复 OK",
+        ])
+    };
     
     let latency = start.elapsed().as_millis() as u64;
     info!("[AI测试] 命令执行完成, 耗时: {}ms", latency);
@@ -205,20 +283,40 @@ pub async fn test_ai_connection() -> Result<AITestResult, String> {
             } else {
                 warn!("[AI测试] ✗ AI 连接测试失败: {}", filtered);
             }
+
+            let mut friendly_error = filtered.clone();
+            if !success && filtered.contains("403") {
+                if let Some((provider, model, base_url)) = get_current_ai_context() {
+                    if provider == "deepseek" {
+                        let mut hints = vec![
+                            "DeepSeek 返回 403，通常是配置或权限问题。".to_string(),
+                            format!("当前模型: {}", model),
+                        ];
+
+                        if !base_url.ends_with("/v1") {
+                            hints.push(format!("当前 Base URL 为 {}，建议改为 https://api.deepseek.com/v1", base_url));
+                        }
+
+                        hints.push("确认 API Key 来自 DeepSeek 官方平台，且未包含空格。".to_string());
+                        hints.push("若使用 deepseek-reasoner，请确认账号已开通该模型权限。".to_string());
+                        friendly_error = format!("{}\n\n{}", filtered, hints.join("\n- "));
+                    }
+                }
+            }
             
             Ok(AITestResult {
                 success,
-                provider: "current".to_string(),
-                model: "default".to_string(),
+                provider: selected_provider.clone(),
+                model: selected_model.clone(),
                 response: if success { Some(filtered.clone()) } else { None },
-                error: if success { None } else { Some(filtered) },
+                error: if success { None } else { Some(friendly_error) },
                 latency_ms: Some(latency),
             })
         }
         Err(e) => Ok(AITestResult {
             success: false,
-            provider: "current".to_string(),
-            model: "default".to_string(),
+            provider: selected_provider,
+            model: selected_model,
             response: None,
             error: Some(e),
             latency_ms: Some(latency),
@@ -279,6 +377,22 @@ fn parse_channel_status_text(output: &str, channel_type: &str) -> Option<(bool, 
         }
     }
     None
+}
+
+fn format_channel_send_error(channel_type: &str, raw: &str) -> String {
+    let lower = raw.to_lowercase();
+
+    if channel_type.eq_ignore_ascii_case("feishu")
+        && (raw.contains("230006") || lower.contains("bot ability is not activated"))
+    {
+        return "飞书发送失败：机器人能力未启用（错误码 230006）。\n\n请在飞书开放平台完成以下操作：\n1) 进入应用 -> 机器人，开启机器人能力\n2) 在应用发布页发布最新版本（至少发布到企业内可用）\n3) 将机器人添加到目标群聊，并确认机器人有发消息权限\n4) 返回本页再次点击“快速测试”\n\n提示：若刚开启能力，可能需要等待 1-2 分钟生效。".to_string();
+    }
+
+    if lower.contains("status code 401") || lower.contains("unauthorized") {
+        return format!("{} 鉴权失败，请检查 App Key / App Secret 是否正确。", channel_type);
+    }
+
+    raw.to_string()
 }
 
 /// 测试渠道连接（检查状态并发送测试消息）
@@ -445,7 +559,7 @@ pub async fn test_channel(channel_type: String) -> Result<ChannelTestResult, Str
                         success: false,
                         channel: channel_type.clone(),
                         message: format!("{} 消息发送失败", channel_type),
-                        error: Some(output),
+                        error: Some(format_channel_send_error(&channel_type, &output)),
                     })
                 }
             }
@@ -455,7 +569,7 @@ pub async fn test_channel(channel_type: String) -> Result<ChannelTestResult, Str
                     success: false,
                     channel: channel_type.clone(),
                     message: format!("{} 消息发送失败", channel_type),
-                    error: Some(e),
+                    error: Some(format_channel_send_error(&channel_type, &e)),
                 })
             }
         }

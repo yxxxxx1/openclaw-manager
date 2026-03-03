@@ -2,6 +2,16 @@
 @tailwind components;
 @tailwind utilities;
 
+:root {
+  --app-bg-0: #080b11;
+  --app-bg-1: #111826;
+  --surface-1: #141b2b;
+  --surface-2: #1a2235;
+  --surface-border: #2a364f;
+  --brand-cyan: #22d3ee;
+  --brand-amber: #fbbf24;
+}
+
 /* 基础样式 */
 * {
   margin: 0;
@@ -20,6 +30,38 @@ body {
   color: #e5e5e5;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+}
+
+.app-shell-bg {
+  background:
+    radial-gradient(1200px 500px at 12% -10%, rgba(34, 211, 238, 0.14), transparent 55%),
+    radial-gradient(1100px 550px at 88% 110%, rgba(251, 191, 36, 0.12), transparent 56%),
+    linear-gradient(180deg, var(--app-bg-1), var(--app-bg-0));
+}
+
+.premium-card {
+  border: 1px solid var(--surface-border);
+  background: linear-gradient(180deg, rgba(26, 34, 53, 0.9), rgba(20, 27, 43, 0.92));
+  box-shadow: 0 10px 35px rgba(0, 0, 0, 0.28), inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+
+.section-title {
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  font-size: 11px;
+  color: #9aa7bf;
+}
+
+.soft-divider {
+  border-color: rgba(154, 167, 191, 0.24);
+}
+
+.status-chip {
+  border: 1px solid rgba(154, 167, 191, 0.34);
+  border-radius: 999px;
+  padding: 3px 10px;
+  font-size: 12px;
+  line-height: 1.2;
 }
 
 /* macOS 标题栏拖拽区域 */

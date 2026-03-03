@@ -25,9 +25,12 @@ export function StatusCard({ status, loading }: StatusCardProps) {
   };
 
   return (
-    <div className="bg-dark-700 rounded-2xl p-6 border border-dark-500">
+    <div className="premium-card rounded-2xl p-6">
       <div className="flex items-center justify-between mb-6">
-        <h3 className="text-lg font-semibold text-white">服务状态</h3>
+        <div>
+          <p className="section-title mb-1">运行状态</p>
+          <h3 className="text-lg font-semibold text-white">服务状态</h3>
+        </div>
         <div className="flex items-center gap-2">
           <div
             className={clsx(
@@ -51,7 +54,7 @@ export function StatusCard({ status, loading }: StatusCardProps) {
       </div>
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <div className="bg-dark-600 rounded-xl p-4">
+        <div className="rounded-xl p-4 border soft-divider bg-dark-700/50">
           <div className="flex items-center gap-2 mb-2">
             <Activity size={16} className="text-accent-cyan" />
             <span className="text-xs text-gray-400">端口</span>
@@ -61,7 +64,7 @@ export function StatusCard({ status, loading }: StatusCardProps) {
           </p>
         </div>
 
-        <div className="bg-dark-600 rounded-xl p-4">
+        <div className="rounded-xl p-4 border soft-divider bg-dark-700/50">
           <div className="flex items-center gap-2 mb-2">
             <Cpu size={16} className="text-accent-purple" />
             <span className="text-xs text-gray-400">进程 ID</span>
@@ -71,7 +74,7 @@ export function StatusCard({ status, loading }: StatusCardProps) {
           </p>
         </div>
 
-        <div className="bg-dark-600 rounded-xl p-4">
+        <div className="rounded-xl p-4 border soft-divider bg-dark-700/50">
           <div className="flex items-center gap-2 mb-2">
             <HardDrive size={16} className="text-accent-green" />
             <span className="text-xs text-gray-400">内存</span>
@@ -81,7 +84,7 @@ export function StatusCard({ status, loading }: StatusCardProps) {
           </p>
         </div>
 
-        <div className="bg-dark-600 rounded-xl p-4">
+        <div className="rounded-xl p-4 border soft-divider bg-dark-700/50">
           <div className="flex items-center gap-2 mb-2">
             <Clock size={16} className="text-accent-amber" />
             <span className="text-xs text-gray-400">运行时间</span>

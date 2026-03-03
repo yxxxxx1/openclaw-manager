@@ -186,6 +186,28 @@ const channelInfo: Record<
   },
 };
 
+const chinaChannelOrder = ['feishu', 'dingtalk', 'wechat', 'telegram', 'discord', 'slack', 'whatsapp', 'imessage'];
+
+const channelFieldGuides: Record<string, Record<string, string>> = {
+  feishu: {
+    appId: '在飞书开放平台 -> 应用详情 -> 凭证与基础信息中获取 App ID。',
+    appSecret: '在同一页面复制 App Secret，注意不要包含空格。',
+    testChatId: '可在飞书会话详情或机器人调试回调中获取 Chat ID。',
+  },
+  dingtalk: {
+    appKey: '在钉钉开放平台应用详情中获取 AppKey。',
+    appSecret: '在钉钉开放平台应用凭证中获取 AppSecret。',
+  },
+  telegram: {
+    botToken: '在 Telegram 里联系 @BotFather 创建机器人并复制 Token。',
+    userId: '联系 @userinfobot 获取你的数字 User ID。',
+  },
+  discord: {
+    botToken: '在 Discord Developer Portal 的 Bot 页面复制 Token。',
+    testChannelId: '在 Discord 开启开发者模式后右键频道复制 Channel ID。',
+  },
+};
+
 interface TestResult {
   success: boolean;
   message: string;
@@ -310,6 +332,9 @@ export function Channels() {
         message: result.message,
         error: result.error,
       });
+      if (result.success) {
+        window.localStorage.setItem('openclaw_onboarding_channel_done', 'true');
+      }
     } catch (e) {
       setTestResult({
         success: false,
@@ -450,11 +475,19 @@ export function Channels() {
       
       // 刷新列表
       await fetchChannels();
-      
-      alert('渠道配置已保存！');
+      window.localStorage.setItem('openclaw_onboarding_channel_done', 'true');
+      setTestResult({
+        success: true,
+        message: '渠道配置已保存，建议点击“快速测试”验证连通性。',
+        error: null,
+      });
     } catch (e) {
       console.error('保存失败:', e);
-      alert('保存失败: ' + e);
+      setTestResult({
+        success: false,
+        message: '保存失败',
+        error: String(e),
+      });
     } finally {
       setSaving(false);
     }
@@ -462,6 +495,13 @@ export function Channels() {
 
   const currentChannel = channels.find((c) => c.id === selectedChannel);
   const currentInfo = currentChannel ? channelInfo[currentChannel.channel_type] : null;
+  const orderedChannels = [...channels].sort((a, b) => {
+    const ia = chinaChannelOrder.indexOf(a.channel_type);
+    const ib = chinaChannelOrder.indexOf(b.channel_type);
+    const va = ia === -1 ? 999 : ia;
+    const vb = ib === -1 ? 999 : ib;
+    return va - vb;
+  });
 
   // 检查渠道是否有有效配置
   const hasValidConfig = (channel: ChannelConfig) => {
@@ -478,6 +518,13 @@ export function Channels() {
     });
   };
 
+  useEffect(() => {
+    const anyConfigured = channels.some((channel) => hasValidConfig(channel));
+    if (anyConfigured) {
+      window.localStorage.setItem('openclaw_onboarding_channel_done', 'true');
+    }
+  }, [channels]);
+
   if (loading) {
     return (
       <div className="h-full flex items-center justify-center">
@@ -488,14 +535,22 @@ export function Channels() {
 
   return (
     <div className="h-full overflow-y-auto scroll-container pr-2">
-      <div className="max-w-4xl">
+      <div className="max-w-4xl space-y-4">
+        <div className="bg-cyan-500/10 border border-cyan-500/30 rounded-xl p-4">
+          <p className="text-sm text-cyan-200 font-medium mb-2">中国区渠道配置建议</p>
+          <ul className="text-xs text-cyan-100/90 space-y-1">
+            <li>• 建议优先配置飞书/钉钉，部署和连通性更稳定。</li>
+            <li>• Telegram/Discord 可能需要外网环境，失败时先检查网络可达性。</li>
+            <li>• 每次保存后请点击“快速测试”，确认机器人可用再进入下一步。</li>
+          </ul>
+        </div>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           {/* 渠道列表 */}
           <div className="md:col-span-1 space-y-2">
             <h3 className="text-sm font-medium text-gray-400 mb-3 px-1">
               消息渠道
             </h3>
-            {channels.map((channel) => {
+            {orderedChannels.map((channel) => {
               const info = channelInfo[channel.channel_type] || {
                 name: channel.channel_type,
                 icon: <MessageSquare size={20} />,
@@ -699,6 +754,10 @@ export function Channels() {
                           placeholder={field.placeholder}
                           className="input-base"
                         />
+                      )}
+
+                      {currentChannel && channelFieldGuides[currentChannel.channel_type]?.[field.key] && (
+                        <p className="text-xs text-cyan-300 mt-1">{channelFieldGuides[currentChannel.channel_type][field.key]}</p>
                       )}
                     </div>
                   ))}

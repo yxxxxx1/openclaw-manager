@@ -279,8 +279,8 @@ export function Settings({ onEnvironmentChange }: SettingsProps) {
                       移除 OpenClaw CLI 工具
                     </li>
                     <li className="flex items-center gap-2">
-                      <span className="w-1.5 h-1.5 bg-yellow-400 rounded-full"></span>
-                      配置文件将被保留在 ~/.openclaw
+                      <span className="w-1.5 h-1.5 bg-red-400 rounded-full"></span>
+                      清理本地配置目录 ~/.openclaw（用于从头测试）
                     </li>
                   </ul>
 
