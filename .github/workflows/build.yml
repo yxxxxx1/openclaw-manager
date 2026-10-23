@@ -73,6 +73,9 @@ jobs:
           workspaces: src-tauri
           cache-on-failure: true
 
+      - name: Verify committed Rust dependency lock
+        run: cargo metadata --locked --no-deps --manifest-path src-tauri/Cargo.toml --format-version 1
+
       # ── Node.js ──────────────────────────────────────────
       - name: Verify local-first CI safety policy
         run: python scripts/ci/check_workflow_policy.py

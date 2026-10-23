@@ -16,4 +16,5 @@ For CI-policy-only or documentation-only edits, run the offline policy validator
 - Run `python scripts/ci/check_workflow_policy.py` and `npm run build` locally first; use `npm ci` in a fresh checkout or after dependency changes.
 - For Rust/native changes run `cargo check --manifest-path src-tauri/Cargo.toml` and applicable Rust tests with platform prerequisites available.
 - The ready PR/main checkpoint must still build macOS, Windows and Linux. A local Windows build does not replace the other platform checks.
+- Commit `src-tauri/Cargo.lock` and verify it with `cargo metadata --locked --no-deps --manifest-path src-tauri/Cargo.toml --format-version 1`. The application keeps Tauri 2.9.1 with its compatible runtime/macro/codegen graph; dependency updates must update the explicit policy checks and pass every platform before merge.
 - A version tag must retain the complete build matrix before its release job. Do not cancel an in-progress tag release or replace release verification with a draft/skipped development run.

@@ -64,6 +64,13 @@ def check_workflow(path):
 
 
 def main():
+    lock = ROOT / "src-tauri/Cargo.lock"
+    assert lock.is_file(), "The application must commit its reproducible Rust dependency lock"
+    lock_text = lock.read_text(encoding="utf-8")
+    for name, version in [("tauri", "2.9.1"), ("tauri-runtime", "2.9.2"), ("tauri-runtime-wry", "2.9.3"), ("tauri-macros", "2.5.1"), ("tauri-codegen", "2.5.1")]:
+        assert f'name = "{name}"\nversion = "{version}"' in lock_text, (name, version)
+    workflow = (ROOT / ".github/workflows/build.yml").read_text(encoding="utf-8")
+    assert "cargo metadata --locked --no-deps" in workflow
     count = sum(check_workflow(path) for path in sorted((ROOT / ".github/workflows").glob("*.yml")))
     assert count, "No local-first PR workflows found"
     print(f"PASS {count} workflow(s); no production operation was executed")
